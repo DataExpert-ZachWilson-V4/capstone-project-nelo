@@ -25,5 +25,5 @@ To fetch historical & current MLB game stats from the MLB API. Process and store
 
 
 
-![MLB Diagram](/MLB_Diagram.png)
+![MLB Diagram](/MLB_Diagram_Update.png)
 
