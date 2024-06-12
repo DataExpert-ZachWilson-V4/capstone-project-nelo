@@ -1,6 +1,6 @@
 
 
-# 3-In-1 MLB Game Stats Pipeline/Predictor/Chat-Bot
+# MLB Game Stats Pipeline/Predictor/Chat-Bot
 
 
 
