@@ -25,7 +25,7 @@ This project involves fetching historical & current MLB game stats from MLB.com 
 # MORE UPDATES WILL BE ADDED DAILY. MY GOAL IS TO HAVE README COMPLETED BY WEEKEND. 
 
 
-![MLB Diagram](/MLB_Diagram_Update.png)
+![MLB Diagram](/MLB_Diagram_Updated.png)
 
 ## Tables
 
