@@ -815,7 +815,7 @@ services:
       dockerfile: Dockerfile.superset
     container_name: superset
     environment:
-      SUPERSET_SECRET_KEY: 'thisISaSECRET_1234'
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
       POSTGRES_HOST: ${AZURE_POSTGRES_HOST}
       POSTGRES_PORT: ${AZURE_POSTGRES_PORT}
       POSTGRES_DB: ${AZURE_SUPERSET_DB}
@@ -834,7 +834,7 @@ services:
       - confluent
     volumes:
       - ./superset:/app/superset
-    command: ["superset"]
+    command: ["/app/superset_init.sh", "superset"]
 
   pgadmin:
     image: dpage/pgadmin4:latest
