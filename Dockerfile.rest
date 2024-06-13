@@ -1,6 +1,5 @@
 FROM confluentinc/cp-kafka-rest:7.4.0
 
-# Create the necessary directories
 USER root
 RUN mkdir -p /etc/kafka-rest
 
