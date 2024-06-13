@@ -1,0 +1,869 @@
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile.airflow
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AZURE_POSTGRES_USERNAME}:${AZURE_POSTGRES_PASSWORD}@${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_AIRFLOW_DB}
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${AZURE_POSTGRES_USERNAME}:${AZURE_POSTGRES_PASSWORD}@${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_AIRFLOW_DB}
+    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
+    AIRFLOW__CORE__FERNET_KEY: 'HPqWFGaV0SS7c8c9oyfTBeZuJNR7TYgQGcqZTe0RHk0='
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    WEB_SERVER_WORKER_TIMEOUT: 600
+  volumes:
+    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
+    - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
+    - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
+    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+    - /var/run/docker.sock:/var/run/docker.sock
+  user: "1001:0"
+  depends_on:
+    &airflow-common-depends-on
+    redis:
+      condition: service_healthy
+
+services:
+  redis:
+    image: redis:7.2-bookworm
+    expose:
+      - 6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 30s
+      retries: 50
+      start_period: 30s
+    restart: always
+    networks:
+      - confluent
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    environment:
+      <<: *airflow-common-env
+      FLASK_LIMITER_STORAGE_URL: redis://:@redis:6379/0
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 30s
+      retries: 10
+      start_period: 30s
+    restart: always
+    volumes:
+      - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
+      - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
+      - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
+      - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    networks:
+      - confluent
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    environment:
+      <<: *airflow-common-env
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    volumes:
+      - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
+      - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
+      - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
+      - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    networks:
+      - confluent
+
+  airflow-worker:
+    <<: *airflow-common
+    command: celery worker
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    environment:
+      <<: *airflow-common-env
+      DUMB_INIT_SETSID: "0"
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    networks:
+      - confluent
+
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    networks:
+      - confluent
+
+  airflow-init:
+    <<: *airflow-common
+    user: "1001:0"
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        if [[ -z "${AIRFLOW_UID}" ]]; then
+          echo
+          echo -e "\033[1;33mWARNING!!!: AIRFLOW_UID not set!\e[0m"
+          echo "If you are on Linux, you SHOULD follow the instructions below to set "
+          echo "AIRFLOW_UID environment variable, otherwise files will be owned by root."
+          echo "For other operating systems you can get rid of the warning with manually created .env file:"
+          echo "    See: https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html#setting-the-right-airflow-user"
+          echo
+        fi
+        one_meg=1048576
+        mem_available=$$(($$(getconf _PHYS_PAGES) * $$(getconf PAGE_SIZE) / one_meg))
+        cpus_available=$$(grep -cE 'cpu[0-9]+' /proc/stat)
+        disk_available=$$(df / | tail -1 | awk '{print $$4}')
+        warning_resources="false"
+        if (( mem_available < 4000 )) ; then
+          echo
+          echo -e "\033[1;33mWARNING!!!: Not enough memory available for Docker.\e[0m"
+          echo "At least 4GB of memory required. You have $$(numfmt --to iec $$((mem_available * one_meg)))"
+          echo
+          warning_resources="true"
+        fi
+        if (( cpus_available < 2 )); then
+          echo
+          echo -e "\033[1;33mWARNING!!!: Not enough CPUS available for Docker.\e[0m"
+          echo "At least 2 CPUs recommended. You have $${cpus_available}"
+          echo
+          warning_resources="true"
+        fi
+        if (( disk_available < one_meg * 10 )); then
+          echo
+          echo -e "\033[1;33mWARNING!!!: Not enough Disk space available for Docker.\e[0m"
+          echo "At least 10 GBs recommended. You have $$(numfmt --to iec $$((disk_available * 1024 )))"
+          echo
+          warning_resources="true"
+        fi
+        if [[ $${warning_resources} == "true" ]]; then
+          echo
+          echo -e "\033[1;33mWARNING!!!: You have not enough resources to run Airflow (see above)!\e[0m"
+          echo "Please follow the instructions to increase amount of resources available:"
+          echo "   https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html#before-you-begin"
+          echo
+        fi
+        mkdir -p /sources/logs /sources/dags /sources/plugins
+        exec /entrypoint airflow version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+      _PIP_ADDITIONAL_REQUIREMENTS: ''
+    volumes:
+      - ${AIRFLOW_PROJ_DIR:-.}:/sources
+    networks:
+      - confluent
+
+  airflow-cli:
+    <<: *airflow-common
+    profiles:
+      - debug
+    environment:
+      <<: *airflow-common-env
+      CONNECTION_CHECK_MAX_COUNT: "0"
+    command:
+      - bash
+      - -c
+      - airflow
+    networks:
+      - confluent
+
+  flower:
+    <<: *airflow-common
+    command: celery flower
+    profiles:
+      - flower
+    ports:
+      - "5555:5555"
+    volumes:
+      - ./flower_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    networks:
+      - confluent
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1024M
+
+  zookeeper1:
+    image: wurstmeister/zookeeper
+    container_name: zookeeper1
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 10
+      ZOOKEEPER_SYNC_LIMIT: 5
+      ZOOKEEPER_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_ZOOKEEPER_DB}
+      ZOOKEEPER_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
+      ZOOKEEPER_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+    networks:
+      - confluent
+
+  zookeeper2:
+    image: wurstmeister/zookeeper
+    container_name: zookeeper2
+    ports:
+      - "2182:2181"
+    environment:
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 10
+      ZOOKEEPER_SYNC_LIMIT: 5
+      ZOOKEEPER_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_ZOOKEEPER_DB}
+      ZOOKEEPER_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
+      ZOOKEEPER_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+    networks:
+      - confluent
+
+  zookeeper3:
+    image: wurstmeister/zookeeper
+    container_name: zookeeper3
+    ports:
+      - "2183:2181"
+    environment:
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 10
+      ZOOKEEPER_SYNC_LIMIT: 5
+      ZOOKEEPER_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_ZOOKEEPER_DB}
+      ZOOKEEPER_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
+      ZOOKEEPER_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+    networks:
+      - confluent
+
+  data-pullers:
+    build:
+      context: .
+      dockerfile: Dockerfile.pullers
+    command: ["python", "/app/start_pullers.py", "${START_GAME_NUMBER}", "${END_GAME_NUMBER}"]
+    volumes:
+      - ./app:/app
+    networks:
+      - confluent
+    environment:
+      - START_GAME_NUMBER=${START_GAME_NUMBER}
+      - END_GAME_NUMBER=${END_GAME_NUMBER}
+
+  kafka1:
+    build:
+      context: .
+      dockerfile: Dockerfile.kafka
+    container_name: kafka1
+    ports:
+      - "9092:9092"
+    volumes:
+      - ./kafka/config/server-1.properties:/kafka/config/server.properties
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper1:2181,zookeeper2:2182,zookeeper3:2183
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
+      KAFKA_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_KAFKA_DB}
+      KAFKA_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
+      KAFKA_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+    depends_on:
+      - zookeeper1
+      - zookeeper2
+      - zookeeper3
+    networks:
+      - confluent
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9092/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  kafka2:
+    build:
+      context: .
+      dockerfile: Dockerfile.kafka
+    container_name: kafka2
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./kafka/config/server-2.properties:/kafka/config/server.properties
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper1:2181,zookeeper2:2182,zookeeper3:2183
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9093
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
+      KAFKA_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_KAFKA_DB}
+      KAFKA_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
+      KAFKA_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+    depends_on:
+      - zookeeper1
+      - zookeeper2
+      - zookeeper3
+    networks:
+      - confluent
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9093/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  kafka3:
+    build:
+      context: .
+      dockerfile: Dockerfile.kafka
+    container_name: kafka3
+    ports:
+      - "9094:9094"
+    volumes:
+      - ./kafka/config/server-3.properties:/kafka/config/server.properties
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper1:2181,zookeeper2:2182,zookeeper3:2183
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka3:9094
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9094
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
+      KAFKA_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_KAFKA_DB}
+      KAFKA_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
+      KAFKA_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+    depends_on:
+      - zookeeper1
+      - zookeeper2
+      - zookeeper3
+    networks:
+      - confluent
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9094/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui
+    container_name: kafka-ui
+    ports:
+      - "8090:8090"
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+      - zookeeper1
+      - zookeeper2
+      - zookeeper3
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAP_SERVERS: kafka1:9092,kafka2:9093,kafka3:9094
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper1:2181,zookeeper2:2182,zookeeper3:2183
+    networks:
+      - confluent
+
+  rest-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.rest
+    hostname: rest-proxy
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+      - zookeeper1
+      - zookeeper2
+      - zookeeper3
+    ports:
+      - "8084:8084"
+    environment:
+      KAFKA_REST_ZOOKEEPER_CONNECT: 'zookeeper1:2181,zookeeper2:2182,zookeeper3:2183'
+      KAFKA_REST_LISTENERS: 'http://0.0.0.0:8084'
+      KAFKA_REST_HOST_NAME: 'rest-proxy'
+      KAFKA_REST_BOOTSTRAP_SERVERS: 'kafka1:9092,kafka2:9093,kafka3:9094'
+    networks:
+      - confluent
+
+  spark-master:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    ports:
+      - "7077:8080"
+      - "8082:8080"
+    networks:
+      - confluent
+    user: "1001:0"
+    environment:
+      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
+      LD_LIBRARY_PATH: /opt/hadoop/native
+    volumes:
+      - ./conf:/opt/spark/conf
+      - ./hdfs/conf:/opt/hadoop/etc/hadoop
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+      - zookeeper1
+      - zookeeper2
+      - zookeeper3
+
+  spark-worker-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: spark-worker-1
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    depends_on:
+      - spark-master
+      - kafka1
+      - kafka2
+      - kafka3
+      - zookeeper1
+      - zookeeper2
+      - zookeeper3
+    environment:
+      SPARK_MODE: worker
+      SPARK_WORKER_CORES: 5
+      SPARK_WORKER_MEMORY: 12g
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_PORT: 8881
+      SPARK_WORKER_WEBUI_PORT: 8090
+      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
+      LD_LIBRARY_PATH: /opt/hadoop/native
+      SPARK_RPC_MESSAGE_MAXSIZE: 20480
+      SPARK_NETWORK_TIMEOUT: 300000
+    ports:
+      - "8086:8090"
+    networks:
+      - confluent
+    volumes:
+      - ./conf:/opt/spark/conf
+    deploy:
+      resources:
+        limits:
+          cpus: '5'
+          memory: 14g
+
+  spark-worker-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: spark-worker-2
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    depends_on:
+      - spark-master
+      - kafka1
+      - kafka2
+      - kafka3
+      - zookeeper1
+      - zookeeper2
+      - zookeeper3
+    environment:
+      SPARK_MODE: worker
+      SPARK_WORKER_CORES: 5
+      SPARK_WORKER_MEMORY: 12g
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_PORT: 8882
+      SPARK_WORKER_WEBUI_PORT: 8091
+      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
+      LD_LIBRARY_PATH: /opt/hadoop/native
+      SPARK_RPC_MESSAGE_MAXSIZE: 20480
+      SPARK_NETWORK_TIMEOUT: 300000
+    ports:
+      - "8087:8091"
+    networks:
+      - confluent
+    volumes:
+      - ./conf:/opt/spark/conf
+    deploy:
+      resources:
+        limits:
+          cpus: '5'
+          memory: 14g
+
+  spark-worker-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: spark-worker-3
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    depends_on:
+      - spark-master
+      - kafka1
+      - kafka2
+      - kafka3
+      - zookeeper1
+      - zookeeper2
+      - zookeeper3
+    environment:
+      SPARK_MODE: worker
+      SPARK_WORKER_CORES: 5
+      SPARK_WORKER_MEMORY: 12g
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_PORT: 8883
+      SPARK_WORKER_WEBUI_PORT: 8092
+      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
+      LD_LIBRARY_PATH: /opt/hadoop/native
+      SPARK_RPC_MESSAGE_MAXSIZE: 20480
+      SPARK_NETWORK_TIMEOUT: 300000
+    ports:
+      - "8093:8092"
+    networks:
+      - confluent
+    volumes:
+      - ./conf:/opt/spark/conf
+    deploy:
+      resources:
+        limits:
+          cpus: '5'
+          memory: 14g
+
+  spark-history:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: spark-history
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.history.HistoryServer
+    ports:
+      - "18080:18080"
+    environment:
+      SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=file:/tmp/spark-events -Dspark.history.ui.port=18080 -Dspark.history.ui.acls.enabled=true -Dspark.history.ui.admin.acls=spark -Dspark.history.ui.admin.acls.groups=hadoop -Dspark.rpc.message.maxSize=2047 -Dspark.network.timeout=10000"
+      SPARK_WORK_DIR: /opt/spark/work
+    volumes:
+      - ./conf:/opt/spark/conf
+      - /tmp/spark-events:/tmp/spark-events
+    depends_on:
+      - spark-master
+      - spark-worker-1
+      - spark-worker-2
+      - spark-worker-3
+    networks:
+      - confluent
+
+  spark-iceberg:
+    image: tabulario/spark-iceberg
+    container_name: spark-iceberg
+    environment:
+      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
+      SPARK_WORKER_CORES: 5
+      SPARK_WORKER_MEMORY: 12g
+      SPARK_EXECUTOR_MEMORY: 12g
+      SPARK_EXECUTOR_CORES: 5
+      SPARK_DRIVER_MEMORY: 12g
+      SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=file:/tmp/spark-events -Dspark.history.ui.port=18080"
+      SPARK_SQL_WAREHOUSE_DIR: "s3a://nelonelonelo/warehouse"
+      SPARK_DIST_CLASSPATH: "/opt/hadoop/etc/hadoop:/opt/hadoop/share/hadoop/common/*:/opt/hadoop/share/hadoop/common/lib/*:/opt/hadoop/share/hadoop/hdfs/*:/opt/hadoop/share/hadoop/hdfs/lib/*:/opt/hadoop/share/hadoop/mapreduce/*:/opt/hadoop/share/hadoop/mapreduce/lib/*:/opt/hadoop/share/hadoop/yarn/*:/opt/hadoop/share/hadoop/yarn/lib/*"
+      SPARK_EXTRA_CLASSPATH: "/opt/hadoop/share/hadoop/tools/lib/*:/opt/spark/jars/*"
+      JAVA_TOOL_OPTIONS: "-Dcom.amazonaws.services.s3.enableV4=true"
+    networks:
+      - confluent
+    volumes:
+      - ./warehouse:/home/iceberg/warehouse
+      - ./notebooks:/home/iceberg/notebooks
+      - ./conf:/opt/spark/conf
+      - ./hdfs/conf:/opt/hadoop/etc/hadoop
+    ports:
+      - 8888:8888
+      - 10000:10000
+      - 10001:10001
+    deploy:
+      resources:
+        limits:
+          cpus: '5'
+          memory: 14g
+
+  hive-metastore:
+    build:
+      context: .
+      dockerfile: Dockerfile.hive-metastore
+    environment:
+      SERVICE_PRECONDITION: zookeeper:2181
+      HIVE_METASTORE_URI: thrift://hive-metastore:9083
+      HADOOP_HOME: /opt/hadoop
+      HIVE_HOME: /opt/hive
+      JAVA_HOME: /usr/local/openjdk-17
+      SERVICE: metastore
+      POSTGRES_USER: ${AZURE_POSTGRES_USERNAME}
+      POSTGRES_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${AZURE_HIVE_DB}
+      POSTGRES_HOST: ${AZURE_POSTGRES_HOST}
+      POSTGRES_PORT: ${AZURE_POSTGRES_PORT}
+    volumes:
+      - ./hive/conf:/opt/hive/conf
+      - ./hdfs/conf:/opt/hadoop/etc/hadoop
+      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+    ports:
+      - "9083:9083"
+    restart: always
+    networks:
+      - confluent
+
+  trino:
+    image: trinodb/trino:448
+    ports:
+      - "8085:8085"
+    environment:
+      JAVA_OPTS: "-Dconfig=/etc/trino/config.properties"
+      TRINO_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_TRINO_DB}
+      TRINO_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
+      TRINO_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+    volumes:
+      - ./etc:/usr/lib/trino/etc:ro
+      - ./hdfs/conf/core-site.xml:/etc/hadoop/core-site.xml
+      - ./hdfs/conf/hdfs-site.xml:/etc/hadoop/hdfs-site.xml
+      - ./etc/catalog/iceberg.properties:/usr/lib/trino/etc/catalog/iceberg.properties:ro
+      - ./etc/catalog/hive.properties:/usr/lib/trino/etc/catalog/hive.properties:ro
+    command: >
+      /bin/bash -c "mkdir -p /var/lib/trino/data &&
+                   chown -R trino:trino /var/lib/trino &&
+                   /usr/lib/trino/bin/launcher run"
+    user: "root"
+    networks:
+      - confluent
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8192M
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: always
+    container_name: qdrant
+    ports:
+      - 6333:6333
+      - 6334:6334
+    configs:
+      - source: qdrant_config
+        target: /qdrant/config/production.yaml
+    environment:
+      QDRANT_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_QDRANT_DB}
+      QDRANT_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
+      QDRANT_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+    networks:
+      - confluent
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '8'
+          memory: 16384M
+
+  dbt-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.dbt
+    environment:
+      DBT_PROFILES_DIR: /dbt
+    networks:
+      - confluent
+    ports:
+      - "8585:8080"
+    restart: always
+    volumes:
+      - ./dbt:/dbt
+      - ./Kafka_producers:/dbt/Kafka_producers
+      - ./Spark_streams:/dbt/Spark_streams
+    command: sleep infinity
+    healthcheck:
+      test: ["CMD", "dbt", "--version"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: streamlit
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./app_files:/app/app_files
+    command: streamlit run /app/streamlit_app.py
+    depends_on:
+      - hayhooks
+    networks:
+      - confluent
+
+  hayhooks:
+    build:
+      context: .
+      dockerfile: Dockerfile.haystack
+    ports:
+      - "1416:1416"
+    command: ["python", "/usr/src/myapp/main.py"]
+    volumes:
+      - .:/usr/src/myapp
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - HAYSTACK_TELEMETRY_ENABLED=False
+      - HAYSTACK_DB_HOST=${AZURE_POSTGRES_HOST}
+      - HAYSTACK_DB_PORT=${AZURE_POSTGRES_PORT}
+      - HAYSTACK_DB_USER=${AZURE_POSTGRES_USERNAME}
+      - HAYSTACK_DB_PASSWORD=${AZURE_POSTGRES_PASSWORD}
+      - HAYSTACK_DB_NAME=${AZURE_HAYSTACK_DB}
+    depends_on:
+      - qdrant
+    networks:
+      - confluent
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    container_name: mlflow
+    ports:
+      - "5000:5000"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_ARTIFACT_ROOT=/mlflow/artifacts
+      - MLFLOW_BACKEND_STORE_URI=postgresql+psycopg2://${AZURE_POSTGRES_USERNAME}:${AZURE_POSTGRES_PASSWORD}@${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_MLFLOW_DB}
+    volumes:
+      - ./mlflow:/mlflow
+      - ./mlflow/artifacts:/mlflow/artifacts
+    networks:
+      - confluent
+
+  superset:
+    build:
+      context: .
+      dockerfile: Dockerfile.superset
+    container_name: superset
+    environment:
+      SUPERSET_SECRET_KEY: 'thisISaSECRET_1234'
+      POSTGRES_HOST: ${AZURE_POSTGRES_HOST}
+      POSTGRES_PORT: ${AZURE_POSTGRES_PORT}
+      POSTGRES_DB: ${AZURE_SUPERSET_DB}
+      POSTGRES_USER: ${AZURE_POSTGRES_USERNAME}
+      POSTGRES_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+      ADMIN_USERNAME: 'admin'
+      ADMIN_FIRSTNAME: 'Admin'
+      ADMIN_LASTNAME: 'User'
+      ADMIN_EMAIL: 'admin@example.com'
+      ADMIN_PASSWORD: 'admin'
+    ports:
+      - "8088:8088"
+    depends_on:
+      - trino
+    networks:
+      - confluent
+    volumes:
+      - ./superset:/app/superset
+    command: ["superset"]
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'True'
+      PGADMIN_LISTEN_PORT: 80
+      PGADMIN_DB_URL: postgresql://${AZURE_POSTGRES_USERNAME}:${AZURE_POSTGRES_PASSWORD}@${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_PGADMIN_DB}
+    ports:
+      - "8089:80"
+    volumes:
+      - ./pgadmin:/pgadmin
+    command: >
+      /bin/bash -c "chmod +x /pgadmin/setup_pgadmin.sh && /pgadmin/setup_pgadmin.sh"
+    networks:
+      - confluent      
+
+networks:
+  confluent:
+    driver: bridge
+    name: confluent
+    attachable: true
+    ipam:
+      config:
+        - subnet: "172.18.0.0/16"
+
+configs:
+  qdrant_config:
+    content: |
+      log_level: INFO
