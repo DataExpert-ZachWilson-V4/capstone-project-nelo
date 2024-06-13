@@ -1,0 +1,3 @@
+databases:
+- database_name: Superset Postgres
+  sqlalchemy_uri: postgresql+psycopg2://{{ AZURE_POSTGRES_USERNAME }}:{{ AZURE_POSTGRES_PASSWORD }}@{{ AZURE_POSTGRES_HOST }}:{{ AZURE_POSTGRES_PORT }}/{{ AZURE_SUPERSET_DB }}
