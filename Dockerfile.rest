@@ -1,0 +1,9 @@
+FROM confluentinc/cp-kafka-rest:7.4.0
+
+# Create the necessary directories
+USER root
+RUN mkdir -p /etc/kafka-rest
+
+COPY ./rest-proxy/kafka-rest.properties /etc/kafka-rest/kafka-rest.properties
+
+CMD ["kafka-rest-start", "/etc/kafka-rest/kafka-rest.properties"]
