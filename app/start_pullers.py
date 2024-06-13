@@ -40,9 +40,9 @@ def main():
 
     start_game_number = args.start_game_number
     end_game_number = args.end_game_number
-    total_pullers = 44
-    batch_size = 2  # Reduced batch size
-    max_concurrent_pullers = 2  # Reduced number of concurrent pullers
+    total_pullers = 10
+    batch_size = 2  
+    max_concurrent_pullers = 2
     game_range = end_game_number - start_game_number + 1
     games_per_puller = game_range // total_pullers
     kafka_topic = 'boxscore_info'
@@ -68,8 +68,7 @@ def main():
                         logger.error(f"An error occurred: {e}")
                 futures = []
 
-                # Added sleep time to further reduce resource usage
-                time.sleep(5)
+                time.sleep(6)
 
         for future in as_completed(futures):
             try:
