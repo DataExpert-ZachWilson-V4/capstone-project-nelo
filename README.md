@@ -1,3 +1,6 @@
+# STILL IN PROGRESS
+# MORE UPDATES TO BE ADDED DAILY. MY GOAL IS TO HAVE README COMPLETED BY WEEKEND. 
+
 # MLB Game Stats Pipeline/Predictor/Chat-Bot
 
 Since I'm using Windows, I installed Ubuntu with Windows Subsystem for Linux (WSL 2) and used Docker Desktop and VS Code to complete this project.
@@ -31,8 +34,6 @@ This project involves fetching historical & current MLB game stats from MLB.com 
 ## ML Process
 
 ## RAG Model/Chat UI Process
-
-# MORE UPDATES WILL BE ADDED DAILY. MY GOAL IS TO HAVE README COMPLETED BY WEEKEND. 
 
 ![MLB Diagram](/MLB_Diagram_Updated.png)
 
