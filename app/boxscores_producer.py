@@ -7,8 +7,10 @@ import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from kafka import KafkaProducer, KafkaAdminClient
 from kafka.admin import NewTopic
-from kafka.errors import TopicAlreadyExistsError
+from kafka.errors import TopicAlreadyExistsError, UnknownTopicOrPartitionError
 import pandas as pd
+from threading import Thread
+from queue import Queue, Full
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -21,7 +23,7 @@ def create_topic(topic_name):
             bootstrap_servers=bootstrap_servers,
             client_id='boxscore_producer'
         )
-        topic_list = [NewTopic(name=topic_name, num_partitions=10, replication_factor=3)]
+        topic_list = [NewTopic(name=topic_name, num_partitions=5, replication_factor=3)]
         existing_topics = admin_client.list_topics()
 
         if topic_name not in existing_topics:
@@ -40,8 +42,8 @@ def create_producer():
             bootstrap_servers=bootstrap_servers,
             value_serializer=lambda x: json.dumps(x).encode('utf-8'),
             retries=10,
-            max_block_ms=10000,
-            request_timeout_ms=60000,
+            max_block_ms=60000,
+            request_timeout_ms=240000,
             acks='all',
         )
         logger.info("Kafka Producer created successfully.")
@@ -50,8 +52,6 @@ def create_producer():
         logger.error(f"Failed to create Kafka Producer: {e}")
         raise
 
-producer = create_producer()
-
 def fetch_game_data(game_number):
     url = f"https://ws.statsapi.mlb.com/api/v1.1/game/{game_number}/feed/live?language=en"
     retries = 5
@@ -59,7 +59,7 @@ def fetch_game_data(game_number):
 
     for attempt in range(retries):
         try:
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, timeout=20)
             response.raise_for_status()
             return response.json()
         except requests.HTTPError as http_err:
@@ -97,9 +97,46 @@ def process_teams_boxscore_data(data):
             return None
     return None
 
+def send_data_to_kafka(producer, topic, records):
+    for record in records:
+        for attempt in range(10):  # Retry up to 10 times
+            try:
+                producer.send(topic, record).get(timeout=60)
+                break
+            except UnknownTopicOrPartitionError as e:
+                logger.error(f"UnknownTopicOrPartitionError: {e}")
+                time.sleep(5)
+            except Exception as e:
+                logger.error(f"Error sending data to Kafka: {e}")
+                time.sleep(5)
+
+class CustomThreadFactory:
+    def __init__(self, name_prefix):
+        self.name_prefix = name_prefix
+        self.counter = 0
+
+    def __call__(self):
+        self.counter += 1
+        thread = Thread()
+        thread.name = f"{self.name_prefix}-{self.counter}"
+        return thread
+
 def stream_teams_boxscore_data(start_game_number, end_game_number, topic):
-    max_workers = 5
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    producer = create_producer()
+    queue = Queue(20)
+    thread_factory = CustomThreadFactory(name_prefix="kafka-producer-thread")
+
+    def custom_rejected_execution_handler(runnable, executor):
+        logger.error(f"Task {runnable} rejected from {executor}")
+        try:
+            queue.put(runnable, timeout=10)
+        except Full:
+            logger.error(f"Queue is full, task {runnable} could not be added.")
+
+    with ThreadPoolExecutor(
+        max_workers=20,
+        thread_name_prefix='kafka-producer-',
+    ) as executor:
         future_to_game = {executor.submit(fetch_game_data, game_number): game_number for game_number in range(start_game_number, end_game_number + 1)}
 
         for future in as_completed(future_to_game):
@@ -110,8 +147,7 @@ def stream_teams_boxscore_data(start_game_number, end_game_number, topic):
                     teams_boxscore_data_frame = process_teams_boxscore_data(data)
                     if teams_boxscore_data_frame is not None:
                         records = teams_boxscore_data_frame.to_dict(orient='records')
-                        for record in records:
-                            producer.send(topic, record)
+                        send_data_to_kafka(producer, topic, records)
                         logger.info(f"Successfully sent teams_boxscore data for game {game_number} to Kafka.")
                     else:
                         logger.info(f"No valid teams_boxscore data for game {game_number}.")
@@ -119,6 +155,7 @@ def stream_teams_boxscore_data(start_game_number, end_game_number, topic):
                     logger.info(f"No data for game {game_number}.")
             except Exception as e:
                 logger.error(f"Error processing game {game_number}: {e}")
+    producer.close()
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Kafka Producer for MLB Data")
