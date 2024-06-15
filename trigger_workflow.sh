@@ -65,19 +65,18 @@ else
     exit 1
 fi
 
-# Instructions for assigning Owner role to the service principal:
+# For assigning Owner role to the service principal:
 # This action requires either the Owner role or a custom role with Microsoft.Authorization/roleAssignments/write permissions on the subscription.
-# Here’s a step-by-step guide to fix this:
-# Step 1: Assign the Required Permissions to the Service Principal
+#
 # To perform role assignments, the service principal must have the necessary permissions. Usually, this means assigning the Owner role to the service principal.
-# 1. Log in to the Azure Portal: Open the Azure Portal.
-# 2. Navigate to Subscriptions: Go to the Subscriptions section and select the subscription where you want to assign the role.
-# 3. Access Control (IAM): Click on Access Control (IAM) on the left-hand menu.
+# 1. Open the Azure Portal.
+# 2. Go to the Subscriptions section and select the subscription where you want to assign the role.
+# 3. Click on Access Control (IAM) on the left-hand menu.
 # 4. Add Role Assignment:
 #    - Click Add and then Add role assignment.
 #    - Select Owner as the role.
 #    - Choose Azure AD user, group, or service principal as the Assign access to.
-#    - Search for your service principal by name or application ID (3d434808-9e7c-42b0-9a77-0baa67b161a5).
+#    - Search for your service principal by name or application ID.
 #    - Select the service principal and click Save.
 
 # Go to the project directory
