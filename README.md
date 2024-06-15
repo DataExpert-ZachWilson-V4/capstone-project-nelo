@@ -3,22 +3,6 @@
 
 # MLB Game Stats Pipeline/Predictor/Chat-Bot
 
-Since I'm using Windows, I installed Ubuntu with Windows Subsystem for Linux (WSL 2) and used Docker Desktop and VS Code to complete this project.
-
-### On Ubuntu, download GitHub CLI: 
-`sudo apt update`
-
-`sudo apt install gh`
-
-### Authenticate with your preferred method:
-`gh auth login`
-
-### In VS Code:
-#### Clone & move into the repo directory:
-`gh repo clone DataExpert-ZachWilson-V4/capstone-project-nelo-mlb-stats`
-
-`cd capstone-project-nelo-mlb-stats`
-
 ### Azure VM Setup
 ##### Follow instructions in `.github/workflows/terraform.yml` to set Azure environment variables.
 
