@@ -19,8 +19,10 @@ Since I'm using Windows, I installed Ubuntu with Windows Subsystem for Linux (WS
 
 `cd capstone-project-nelo-mlb-stats`
 
-### Start Services
-Run `docker-compose up -d` in root directory.
+### Azure VM Setup
+Run `./trigger_workflow.sh`
+
+This automates the setup of Azure VM using Terraform and GitHub Actions. Installs tools (Terraform, Azure CLI, sshpass), logs into Azure, verifies subscription access, generates SSH keys, initializes Terraform, applies Terraform changes to create or update resources, and retrieves the VM's public IP address. Waits for the VM to be in a running state, connects to it via SSH, installs Docker, Docker Compose, VS Code Server, and GitHub CLI, copies project files, and starts services with Docker Compose. The GitHub Actions workflow automates the deployment process on push to the main branch, ensuring continuous integration and deployment.
 
 ### When done:
 #### Clean Up Docker Environment
