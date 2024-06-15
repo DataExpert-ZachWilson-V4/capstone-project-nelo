@@ -1,0 +1,16 @@
+<configuration>
+  <property>
+    <name>fs.defaultFS</name>
+    <value>abfss://${AZURE_CONTAINER}@${AZURE_ACCOUNT_NAME}.dfs.core.windows.net</value>
+  </property>
+  
+  <!-- Azure Blob Storage Configuration -->
+  <property>
+    <name>fs.azure</name>
+    <value>org.apache.hadoop.fs.azure.NativeAzureFileSystem</value>
+  </property>
+  <property>
+    <name>fs.azure.account.key.${AZURE_ACCOUNT_NAME}.blob.core.windows.net</name>
+    <value>${AZURE_ACCOUNT_KEY}</value>
+  </property>
+</configuration>

@@ -1,0 +1,91 @@
+<configuration>
+    <!-- ResourceManager host configuration -->
+    <property>
+        <name>yarn.resourcemanager.hostname</name>
+        <value>yarn-master</value>
+    </property>
+
+    <!-- ResourceManager scheduler address -->
+    <property>
+        <name>yarn.resourcemanager.scheduler.address</name>
+        <value>yarn-master:8030</value>
+    </property>
+
+    <!-- ResourceManager web application address -->
+    <property>
+        <name>yarn.resourcemanager.webapp.address</name>
+        <value>yarn-master:8088</value>
+    </property>
+
+    <!-- ResourceManager address -->
+    <property>
+        <name>yarn.resourcemanager.address</name>
+        <value>yarn-master:8050</value>
+    </property>
+
+    <!-- ResourceManager resource tracker address -->
+    <property>
+        <name>yarn.resourcemanager.resource-tracker.address</name>
+        <value>yarn-master:8025</value>
+    </property>
+
+    <!-- Configuration for Azure Blob Storage as the filesystem -->
+    <property>
+        <name>fs.defaultFS</name>
+        <value>abfss://${AZURE_CONTAINER}@${AZURE_ACCOUNT_NAME}.dfs.core.windows.net</value>
+    </property>
+    <property>
+        <name>fs.azure</name>
+        <value>org.apache.hadoop.fs.azure.NativeAzureFileSystem</value>
+    </property>
+    <property>
+        <name>fs.azure.account.key.${AZURE_ACCOUNT_NAME}.blob.core.windows.net</name>
+        <value>${AZURE_ACCOUNT_KEY}</value>
+    </property>
+
+    <!-- Enabling log aggregation -->
+    <property>
+        <name>yarn.log-aggregation-enable</name>
+        <value>true</value>
+    </property>
+
+    <!-- Hive Metastore configuration -->
+    <property>
+        <name>hive.metastore.uris</name>
+        <value>thrift://hive-metastore:9083</value>
+    </property>
+
+    <!-- JDBC Configuration for Hive Metastore using PostgreSQL -->
+    <property>
+        <name>javax.jdo.option.ConnectionURL</name>
+        <value>jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_HIVE_DB}</value>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionDriverName</name>
+        <value>org.postgresql.Driver</value>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionUserName</name>
+        <value>${AZURE_POSTGRES_USERNAME}</value>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionPassword</name>
+        <value>${AZURE_POSTGRES_PASSWORD}</value>
+    </property>
+
+    <!-- Configuration to control the maximum memory the ApplicationMaster can use -->
+    <property>
+        <name>yarn.app.mapreduce.am.resource.mb</name>
+        <value>1024</value>
+    </property>
+
+    <!-- Configuration for maximum allocation for each container request at the RM -->
+    <property>
+        <name>yarn.scheduler.maximum-allocation-mb</name>
+        <value>4096</value>
+    </property>
+    <property>
+        <name>yarn.scheduler.maximum-allocation-vcores</name>
+        <value>2</value>
+    </property>
+</configuration>
