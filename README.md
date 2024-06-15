@@ -20,8 +20,9 @@ Since I'm using Windows, I installed Ubuntu with Windows Subsystem for Linux (WS
 `cd capstone-project-nelo-mlb-stats`
 
 ### Azure VM Setup
-Follow instructions in `.github/workflows/terraform.yml` to set Azure environment variables.
-Once your Azure environment variables are set in GitHub Secrets, go to `Actions` tab at top of repo, click on `Deploy` workflow and `click Run workflow`.
+##### Follow instructions in `.github/workflows/terraform.yml` to set Azure environment variables.
+
+##### Once your Azure environment variables are set in GitHub Secrets, go to `Actions` tab at top of repo, click on `Deploy` workflow and `click Run workflow`.
 
 This automates the setup of Azure VM using Terraform and GitHub Actions. Installs tools (Terraform, Azure CLI, sshpass), logs into Azure, verifies subscription access, generates SSH keys, initializes Terraform, applies Terraform changes to create or update resources, and retrieves the VM's public IP address. Waits for the VM to be in a running state, connects to it via SSH, installs Docker, Docker Compose, VS Code Server, and GitHub CLI, copies project files, and starts services with Docker Compose.
 
