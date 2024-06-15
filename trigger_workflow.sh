@@ -8,12 +8,6 @@ fi
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
-# Load environment variables from .env file
-if [ -f .env ]; then
-  echo "Loading environment variables from .env file..."
-  export $(grep -v '^#' .env | xargs)
-fi
-
 # Directory containing your project
 PROJECT_DIR="$(dirname "$0")"
 
