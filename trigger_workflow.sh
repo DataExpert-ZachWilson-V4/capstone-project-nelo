@@ -103,7 +103,10 @@ echo "VM Public IP: $PUBLIC_IP"
 
 # Wait for the VM to be ready to accept SSH connections
 echo "Waiting for the VM to be ready to accept SSH connections..."
-sleep 60
+while ! nc -z $PUBLIC_IP 22; do   
+  echo "Waiting for SSH to be available..."
+  sleep 10
+done
 
 # Connect to the VM and set up Docker, Docker Compose, and other dependencies
 sshpass -p "$ADMIN_PASSWORD" ssh -o StrictHostKeyChecking=no azureuser@$PUBLIC_IP << 'EOF'
