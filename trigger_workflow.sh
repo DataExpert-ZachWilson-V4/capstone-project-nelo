@@ -101,8 +101,15 @@ terraform apply -auto-approve
 PUBLIC_IP=$(terraform output -raw public_ip)
 echo "VM Public IP: $PUBLIC_IP"
 
-# Wait for the VM to be ready to accept SSH connections
-echo "Waiting for the VM to be ready to accept SSH connections..."
+# Wait for the VM to be in 'running' state
+echo "Waiting for VM to be in 'running' state..."
+while [ "$(az vm get-instance-view --name myVM --resource-group myResourceGroup --query "instanceView.statuses[?code=='PowerState/running'] | [0].code" --output tsv)" != "PowerState/running" ]; do
+  echo "Waiting for VM to be running..."
+  sleep 10
+done
+
+# Wait for the SSH port to be available
+echo "Waiting for the SSH port to be available..."
 while ! nc -z $PUBLIC_IP 22; do   
   echo "Waiting for SSH to be available..."
   sleep 10
