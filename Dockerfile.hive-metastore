@@ -1,0 +1,86 @@
+# Use an official OpenJDK runtime as a parent image
+FROM openjdk:17-jdk-slim
+
+# Install necessary dependencies
+RUN apt-get update && \
+    apt-get install -y wget gnupg2 dos2unix curl libsasl2-dev build-essential libpq-dev xmlstarlet chrony gettext && \
+    rm -rf /var/lib/apt/lists/*
+
+# Start chrony for time synchronization
+RUN service chrony start
+
+# Set environment variables
+ENV HIVE_VERSION=4.0.0
+ENV HIVE_HOME=/opt/hive
+ENV JAVA_HOME=/usr/local/openjdk-17
+
+# Download and install Hive
+RUN mkdir -p ${HIVE_HOME} && \
+    wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 0 https://dlcdn.apache.org/hive/hive-${HIVE_VERSION}/apache-hive-${HIVE_VERSION}-bin.tar.gz -O /tmp/hive.tar.gz && \
+    tar -xzf /tmp/hive.tar.gz -C ${HIVE_HOME} --strip-components=1 && \
+    rm /tmp/hive.tar.gz
+
+# Exclude SLF4J jar
+RUN rm ${HIVE_HOME}/lib/log4j-slf4j-impl-2.18.0.jar
+
+# Add Hadoop native libraries
+RUN mkdir -p /opt/hadoop && \
+    curl -sL "https://archive.apache.org/dist/hadoop/core/hadoop-3.3.4/hadoop-3.3.4.tar.gz" | tar -xz -C /opt/hadoop --strip-components=1 && \
+    mv /opt/hadoop/lib/native /opt/hadoop/native
+
+# Set environment variables    
+ENV HADOOP_HOME=/opt/hadoop
+ENV HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+ENV LD_LIBRARY_PATH=$HADOOP_HOME/lib/native:$LD_LIBRARY_PATH
+ENV PATH=${HIVE_HOME}/bin:${PATH}
+
+# Install PostgreSQL JDBC driver version 42.7.3
+RUN wget https://jdbc.postgresql.org/download/postgresql-42.7.3.jar -O ${HIVE_HOME}/lib/postgresql-42.7.3.jar
+
+# Ensure the driver is in the expected directory
+RUN if [ ! -f ${HIVE_HOME}/lib/postgresql-42.7.3.jar ]; then echo "Driver not installed"; exit 1; fi
+
+# Create a Java program to check if JDBC driver is loadable
+RUN echo 'public class CheckDriver { public static void main(String[] args) { try { Class.forName("org.postgresql.Driver"); System.out.println("Driver loaded successfully"); } catch (Exception e) { System.out.println("Failed to load driver: " + e.getMessage()); System.exit(1); } } }' > CheckDriver.java
+
+# Compile the Java program
+RUN javac CheckDriver.java
+
+# Check if JDBC driver is loadable
+RUN java -cp ${HIVE_HOME}/lib/postgresql-42.7.3.jar:. CheckDriver
+
+# Set CLASSPATH to include the JDBC driver
+ENV CLASSPATH=${HIVE_HOME}/lib/postgresql-42.7.3.jar:${HIVE_HOME}/lib/*:${JAVA_HOME}/lib/*
+
+# Copy configuration files
+COPY ./hive/conf/hive-site.xml.template ${HIVE_HOME}/conf/hive-site.xml.template
+COPY ./hive/conf/metastore-site.xml.template ${HIVE_HOME}/conf/metastore-site.xml.template
+COPY ./hive/conf/validate-config.sh ${HIVE_HOME}/conf/validate-config.sh
+
+# Ensure the scripts and configuration files have the correct permissions
+RUN chmod +x ${HIVE_HOME}/conf/validate-config.sh && \
+    chmod 644 ${HIVE_HOME}/conf/hive-site.xml.template && \
+    chmod 644 ${HIVE_HOME}/conf/metastore-site.xml.template
+
+# Install Python and necessary Python packages
+RUN apt-get update && apt-get install -y python3 python3-pip && \
+    pip3 install --no-cache-dir \
+    pandas \
+    pyhive \
+    sqlalchemy \
+    thrift \
+    thrift-sasl \
+    sasl \
+    python-dotenv \
+    psycopg2 \
+    psycopg2-binary
+
+# Expose the Hive Metastore port
+EXPOSE 9083
+
+# Use envsubst to substitute environment variables in the configuration files
+RUN envsubst < ${HIVE_HOME}/conf/hive-site.xml.template > ${HIVE_HOME}/conf/hive-site.xml
+RUN envsubst < ${HIVE_HOME}/conf/metastore-site.xml.template > ${HIVE_HOME}/conf/metastore-site.xml
+
+# Start Hive Metastore service
+CMD ["sh", "-c", "echo $CLASSPATH && ls -la ${HIVE_HOME}/lib/ && java -cp ${HIVE_HOME}/lib/postgresql-42.7.3.jar:. CheckDriver && ${HIVE_HOME}/conf/validate-config.sh && hive --service metastore"]
