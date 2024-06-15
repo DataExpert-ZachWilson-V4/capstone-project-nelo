@@ -1,0 +1,82 @@
+name: Terraform
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 1.0.0
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./terraform-azure-vm-setup
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        working-directory: ./terraform-azure-vm-setup
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+
+# Instructions to obtain Azure credentials and set up GitHub secrets:
+
+# 1. Azure Subscription ID:
+#    - Navigate to the Azure portal (https://portal.azure.com).
+#    - In the left sidebar, click on "Subscriptions".
+#    - Select the subscription you want to use.
+#    - The Subscription ID will be displayed at the top of the subscription overview page.
+
+# 2. Tenant ID:
+#    - In the Azure portal, go to "Azure Active Directory".
+#    - In the overview section, you will find the Tenant ID.
+
+# 3. Client ID and Client Secret (Service Principal):
+#    - Go to "Azure Active Directory" in the Azure portal.
+#    - In the left sidebar, click on "App registrations".
+#    - Click on "New registration".
+#        - Name: Give your application a name.
+#        - Supported account types: Select "Accounts in this organizational directory only".
+#        - Redirect URI: You can leave this blank for now.
+#    - Click "Register".
+#    - Once registered, you will be redirected to the application's overview page where you will see the Application (client) ID. This is your ARM_CLIENT_ID.
+#    - Next, click on "Certificates & secrets" in the left sidebar.
+#    - Under "Client secrets", click "New client secret".
+#    - Add a description and select the expiry period, then click "Add".
+#    - The new client secret will be displayed. Copy the Value immediately; this is your ARM_CLIENT_SECRET. You won't be able to see it again once you navigate away.
+
+# 4. Admin Username and Password:
+#    - These are the credentials you want to set for the admin user on your Azure VM. You can choose any username and password you prefer. Make sure to store them securely.
+
+# Setting Up Secrets in GitHub:
+
+# 1. Go to your repository on GitHub.
+# 2. Click on "Settings".
+# 3. In the left sidebar, click on "Secrets and variables" > "Actions".
+# 4. Click on "New repository secret" for each secret and add the corresponding value:
+#    - ARM_CLIENT_ID
+#    - ARM_CLIENT_SECRET
+#    - ARM_SUBSCRIPTION_ID
+#    - ARM_TENANT_ID
+#    - ADMIN_USERNAME
+#    - ADMIN_PASSWORD
+
+# Example of Adding a Secret in GitHub:
+# - Secret name: ARM_CLIENT_ID
+# - Secret value: <your-client-id>
+
+# Repeat the above steps for each of the required secrets.
