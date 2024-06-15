@@ -293,7 +293,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.pullers
-    command: ["python", "/app/start_pullers.py", "${START_GAME_NUMBER}", "${END_GAME_NUMBER}"]
+    command: ["python", "/app/start_producers.py", "${START_GAME_NUMBER}", "${END_GAME_NUMBER}"]
     volumes:
       - ./app:/app
     networks:
@@ -463,17 +463,22 @@ services:
       dockerfile: Dockerfile.spark
     command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
     ports:
-      - "7077:8080"
-      - "8082:8080"
+      - "7077:7077"
+      - "8080:8080"
     networks:
       - confluent
     user: "1001:0"
     environment:
       HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
       LD_LIBRARY_PATH: /opt/hadoop/native
+      YARN_CONF_DIR: /opt/hadoop/etc/yarn
+      SPARK_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_SPARK_DB}
+      SPARK_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
+      SPARK_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
     volumes:
       - ./conf:/opt/spark/conf
-      - ./hdfs/conf:/opt/hadoop/etc/hadoop
+      - /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop
+      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn   
     depends_on:
       - kafka1
       - kafka2
@@ -507,12 +512,17 @@ services:
       LD_LIBRARY_PATH: /opt/hadoop/native
       SPARK_RPC_MESSAGE_MAXSIZE: 20480
       SPARK_NETWORK_TIMEOUT: 300000
+      SPARK_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_SPARK_DB}
+      SPARK_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
+      SPARK_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
     ports:
       - "8086:8090"
     networks:
       - confluent
     volumes:
       - ./conf:/opt/spark/conf
+      - /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop
+      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn  
     deploy:
       resources:
         limits:
@@ -544,12 +554,17 @@ services:
       LD_LIBRARY_PATH: /opt/hadoop/native
       SPARK_RPC_MESSAGE_MAXSIZE: 20480
       SPARK_NETWORK_TIMEOUT: 300000
+      SPARK_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_SPARK_DB}
+      SPARK_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
+      SPARK_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
     ports:
       - "8087:8091"
     networks:
       - confluent
     volumes:
       - ./conf:/opt/spark/conf
+      - /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop
+      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn        
     deploy:
       resources:
         limits:
@@ -581,12 +596,17 @@ services:
       LD_LIBRARY_PATH: /opt/hadoop/native
       SPARK_RPC_MESSAGE_MAXSIZE: 20480
       SPARK_NETWORK_TIMEOUT: 300000
+      SPARK_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_SPARK_DB}
+      SPARK_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
+      SPARK_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
     ports:
       - "8093:8092"
     networks:
       - confluent
     volumes:
       - ./conf:/opt/spark/conf
+      - /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop
+      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn        
     deploy:
       resources:
         limits:
@@ -602,11 +622,16 @@ services:
     ports:
       - "18080:18080"
     environment:
-      SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=file:/tmp/spark-events -Dspark.history.ui.port=18080 -Dspark.history.ui.acls.enabled=true -Dspark.history.ui.admin.acls=spark -Dspark.history.ui.admin.acls.groups=hadoop -Dspark.rpc.message.maxSize=2047 -Dspark.network.timeout=10000"
+      SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=abfss://${AZURE_CONTAINER}@${AZURE_ACCOUNT_NAME}.dfs.core.windows.net/spark-events -Dspark.history.ui.port=18080 -Dspark.history.ui.acls.enabled=true -Dspark.history.ui.admin.acls=spark -Dspark.history.ui.admin.acls.groups=hadoop -Dspark.rpc.message.maxSize=2047 -Dspark.network.timeout=10000"
       SPARK_WORK_DIR: /opt/spark/work
+      SPARK_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_SPARK_DB}
+      SPARK_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
+      SPARK_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
     volumes:
       - ./conf:/opt/spark/conf
       - /tmp/spark-events:/tmp/spark-events
+      - /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop
+      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn        
     depends_on:
       - spark-master
       - spark-worker-1
@@ -630,13 +655,17 @@ services:
       SPARK_DIST_CLASSPATH: "/opt/hadoop/etc/hadoop:/opt/hadoop/share/hadoop/common/*:/opt/hadoop/share/hadoop/common/lib/*:/opt/hadoop/share/hadoop/hdfs/*:/opt/hadoop/share/hadoop/hdfs/lib/*:/opt/hadoop/share/hadoop/mapreduce/*:/opt/hadoop/share/hadoop/mapreduce/lib/*:/opt/hadoop/share/hadoop/yarn/*:/opt/hadoop/share/hadoop/yarn/lib/*"
       SPARK_EXTRA_CLASSPATH: "/opt/hadoop/share/hadoop/tools/lib/*:/opt/spark/jars/*"
       JAVA_TOOL_OPTIONS: "-Dcom.amazonaws.services.s3.enableV4=true"
+      SPARK_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_SPARK_DB}
+      SPARK_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
+      SPARK_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
     networks:
       - confluent
     volumes:
       - ./warehouse:/home/iceberg/warehouse
       - ./notebooks:/home/iceberg/notebooks
       - ./conf:/opt/spark/conf
-      - ./hdfs/conf:/opt/hadoop/etc/hadoop
+      - /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop
+      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn  
     ports:
       - 8888:8888
       - 10000:10000
@@ -665,8 +694,10 @@ services:
       POSTGRES_PORT: ${AZURE_POSTGRES_PORT}
     volumes:
       - ./hive/conf:/opt/hive/conf
-      - ./hdfs/conf:/opt/hadoop/etc/hadoop
+      - /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop
+      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn  
       - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+      - ./hive/conf/metastore-site.xml:/opt/hive/conf/metastore-site.xml:ro      
     ports:
       - "9083:9083"
     networks:
@@ -683,8 +714,8 @@ services:
       TRINO_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
     volumes:
       - ./etc:/usr/lib/trino/etc:ro
-      - ./hdfs/conf/core-site.xml:/etc/hadoop/core-site.xml
-      - ./hdfs/conf/hdfs-site.xml:/etc/hadoop/hdfs-site.xml
+      - ./opt/hadoop/etc/hadoop/core-site.xml:/etc/hadoop/core-site.xml
+      - ./opt/hadoop/etc/hadoop/hdfs-site.xml:/etc/hadoop/hdfs-site.xml
       - ./etc/catalog/iceberg.properties:/usr/lib/trino/etc/catalog/iceberg.properties:ro
       - ./etc/catalog/hive.properties:/usr/lib/trino/etc/catalog/hive.properties:ro
     command: >
@@ -741,8 +772,8 @@ services:
     restart: always
     volumes:
       - ./dbt:/dbt
-      - ./Kafka_producers:/dbt/Kafka_producers
-      - ./Spark_streams:/dbt/Spark_streams
+      - ./app/producers:/dbt/Kafka_producers
+      - ./app/consumers:/dbt/Spark_streams
     command: sleep infinity
     healthcheck:
       test: ["CMD", "dbt", "--version"]
