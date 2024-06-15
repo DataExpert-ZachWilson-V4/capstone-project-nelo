@@ -35,7 +35,7 @@ This project involves fetching historical & current MLB game stats from MLB.com 
 
 ## RAG Model/Chat UI Process
 
-![MLB Diagram](/MLB_Diagram_Updated.png)
+![MLB Diagram](/MLB_Diagram.png)
 
 ## Tables
 
