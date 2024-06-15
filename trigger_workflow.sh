@@ -44,6 +44,7 @@ fi
 # Verify installations
 terraform -v
 az --version
+sshpass -V
 
 # Login to Azure CLI using Service Principal
 echo "Logging into Azure CLI using service principal..."
@@ -99,6 +100,10 @@ terraform apply -auto-approve
 # Fetch the public IP output from Terraform
 PUBLIC_IP=$(terraform output -raw public_ip)
 echo "VM Public IP: $PUBLIC_IP"
+
+# Wait for the VM to be ready to accept SSH connections
+echo "Waiting for the VM to be ready to accept SSH connections..."
+sleep 60
 
 # Connect to the VM and set up Docker, Docker Compose, and other dependencies
 sshpass -p "$ADMIN_PASSWORD" ssh -o StrictHostKeyChecking=no azureuser@$PUBLIC_IP << 'EOF'
