@@ -1,0 +1,23 @@
+FROM wurstmeister/kafka:latest
+
+USER root
+
+# Install necessary packages
+RUN apt-get update && apt-get install -y \
+    chrony \
+    libpq-dev \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages
+RUN pip3 install \
+    psycopg2 \
+    psycopg2-binary
+
+# Start chrony for time synchronization
+RUN service chrony start
+
+COPY ./update_meta_properties.sh /usr/bin/update_meta_properties.sh
+RUN chmod +x /usr/bin/update_meta_properties.sh
+
+ENTRYPOINT ["/bin/bash", "-c", "rm -rf /var/lib/kafka/data/* && /usr/bin/update_meta_properties.sh && start-kafka.sh"]
