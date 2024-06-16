@@ -14,11 +14,26 @@ if [ -f .env ]; then
   export $(grep -v '^#' .env | xargs)
 fi
 
+# Ensure RESOURCE_GROUP_NAME is set
+if [ -z "$RESOURCE_GROUP_NAME" ]; then
+    echo "RESOURCE_GROUP_NAME is not set. Please set it in the .env file."
+    exit 1
+fi
+
 # Ensure STORAGE_ACCOUNT_NAME is set
 if [ -z "$STORAGE_ACCOUNT_NAME" ]; then
     echo "STORAGE_ACCOUNT_NAME is not set. Please set it in the .env file."
     exit 1
 fi
+
+# Ensure required environment variables are set
+required_vars=(RESOURCE_GROUP_NAME STORAGE_ACCOUNT_NAME ARM_CLIENT_ID ARM_CLIENT_SECRET ARM_TENANT_ID ARM_SUBSCRIPTION_ID)
+for var in "${required_vars[@]}"; do
+  if [ -z "${!var}" ]; then
+    echo "$var is not set. Please set it in the .env file."
+    exit 1
+  fi
+done
 
 # Directory containing your project
 PROJECT_DIR="$(dirname "$0")"
@@ -83,16 +98,12 @@ log_and_time "install_dependencies"
 if [ -z "$VAULT_TOKEN" ]; then
     # Start Vault server in dev mode for demonstration purposes
     vault server -dev -dev-root-token-id="root" &
-
     # Wait for Vault to start
     sleep 10
-
     # Set Vault environment variables
     export VAULT_TOKEN='root'
-
     # Generate a new Vault token
     NEW_VAULT_TOKEN=$(vault token create -ttl=1h -field token)
-
     # Write the new Vault token to the .env file
     echo "VAULT_TOKEN=$NEW_VAULT_TOKEN" >> .env
     export VAULT_TOKEN=$NEW_VAULT_TOKEN
@@ -101,8 +112,8 @@ else
     export VAULT_TOKEN
 fi
 
-# Store the PostgreSQL credentials in Vault . Replace <USERNAME> with your username and <YOUR_PASSWORD_HERE> with your password
-log_and_time "vault kv put secret/data/postgres username=\"<USERNAME>\" password=\"<YOUR_PASSWORD_HERE>\""
+# Store the PostgreSQL credentials in Vault
+log_and_time "vault kv put secret/data/postgres username='$AZURE_POSTGRES_USERNAME' password='$AZURE_POSTGRES_PASSWORD'"
 
 # Login to Azure CLI using Service Principal
 echo "Logging into Azure CLI using service principal..."
@@ -131,6 +142,14 @@ else
     exit 1
 fi
 
+# Check if the resource group exists
+if az group show --name "$RESOURCE_GROUP_NAME" > /dev/null 2>&1; then
+    echo "Resource group $RESOURCE_GROUP_NAME already exists."
+else
+    echo "Creating resource group $RESOURCE_GROUP_NAME..."
+    az group create --name "$RESOURCE_GROUP_NAME" --location "East US"
+fi
+
 # Navigate to the project directory
 cd "$PROJECT_DIR"
 
@@ -139,6 +158,9 @@ if [ ! -f id_rsa ] || [ ! -f id_rsa.pub ]; then
     echo "Generating SSH key pair..."
     ssh-keygen -t rsa -b 4096 -f id_rsa -q -N ""
 fi
+
+# Export SSH public key for Terraform
+export TF_VAR_ssh_public_key=$(cat id_rsa.pub)
 
 # Move the SSH key pair to Terraform directory
 cp id_rsa* terraform-azure-vm-setup/
@@ -155,53 +177,48 @@ import_resource() {
     if az resource show --ids "$resource_id" &> /dev/null; then
         echo "$resource_type $resource_id already exists. Importing to Terraform..."
         terraform import $resource_type "$resource_id"
+    else
+        echo "$resource_type $resource_id does not exist. Creating new resource..."
     fi
 }
 
 # Set the resource IDs
 RESOURCE_GROUP_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME"
 STORAGE_ACCOUNT_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT_NAME"
-VNET_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Network/virtualNetworks/myVnet"
-SUBNET_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Network/virtualNetworks/myVnet/subnets/mySubnet"
-NSG_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Network/networkSecurityGroups/myNsg"
-NIC_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Network/networkInterfaces/myNic"
-VM_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Compute/virtualMachines/myVM"
-DISK_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Compute/disks/myOsDisk"
-POSTGRES_SERVER_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server"
+VNET_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Network/virtualNetworks/$VIRTUAL_NETWORK_NAME"
+SUBNET_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Network/virtualNetworks/$VIRTUAL_NETWORK_NAME/subnets/$SUBNET_NAME"
+NSG_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Network/networkSecurityGroups/$NETWORK_SECURITY_GROUP_NAME"
+NIC_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Network/networkInterfaces/$NETWORK_INTERFACE_NAME"
+VM_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Compute/virtualMachines/$VIRTUAL_MACHINE_NAME"
+DISK_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Compute/disks/$DISK_NAME"
+POSTGRES_SERVER_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME"
+CONTAINER_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT_NAME/blobServices/default/containers/$AZURE_CONTAINER"
 
 # Import existing resources if they exist
-import_resource "azurerm_resource_group.rg" "$RESOURCE_GROUP_ID"
-import_resource "azurerm_storage_account.storage" "$STORAGE_ACCOUNT_ID"
-import_resource "azurerm_virtual_network.vnet" "$VNET_ID"
-import_resource "azurerm_subnet.subnet" "$SUBNET_ID"
-import_resource "azurerm_network_security_group.nsg" "$NSG_ID"
-import_resource "azurerm_network_interface.nic" "$NIC_ID"
-import_resource "azurerm_virtual_machine.vm" "$VM_ID"
+log_and_time "import_resource azurerm_resource_group.main $RESOURCE_GROUP_ID"
+log_and_time "import_resource azurerm_storage_account.storage $STORAGE_ACCOUNT_ID"
+log_and_time "import_resource azurerm_virtual_network.vnet $VNET_ID"
+log_and_time "import_resource azurerm_subnet.subnet $SUBNET_ID"
+log_and_time "import_resource azurerm_network_security_group.nsg $NSG_ID"
+log_and_time "import_resource azurerm_network_interface.nic $NIC_ID"
+log_and_time "import_resource azurerm_virtual_machine.vm $VM_ID"
+log_and_time "import_resource azurerm_managed_disk.my_disk $DISK_ID"
+log_and_time "import_resource azurerm_postgresql_server.postgres_server $POSTGRES_SERVER_ID"
+log_and_time "import_resource azurerm_storage_container.container $CONTAINER_ID"
 
-# Special handling for existing disk
-if az resource show --ids "$DISK_ID" &> /dev/null; then
-    echo "Disk $DISK_ID already exists. Using attach option for the VM..."
-    terraform import azurerm_managed_disk.my_disk "$DISK_ID"
-fi
 
-# Special handling for existing PostgreSQL server
-if az resource show --ids "$POSTGRES_SERVER_ID" &> /dev/null; then
-    echo "PostgreSQL server $POSTGRES_SERVER_ID already exists. Importing to Terraform..."
-    terraform import azurerm_postgresql_server.postgres_server "$POSTGRES_SERVER_ID"
-
-    # Import existing PostgreSQL databases
-    import_resource "azurerm_postgresql_database.airflow_db" "/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/airflow"
-    import_resource "azurerm_postgresql_database.superset_db" "/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/superset"
-    import_resource "azurerm_postgresql_database.hive_db" "/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/hive"
-    import_resource "azurerm_postgresql_database.mlflow_db" "/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/mlflow"
-    import_resource "azurerm_postgresql_database.haystack_db" "/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/haystack"
-    import_resource "azurerm_postgresql_database.zookeeper_db" "/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/zookeeper"
-    import_resource "azurerm_postgresql_database.kafka_db" "/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/kafka"
-    import_resource "azurerm_postgresql_database.pgadmin_db" "/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/pgadmin"
-    import_resource "azurerm_postgresql_database.trino_db" "/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/trino"
-    import_resource "azurerm_postgresql_database.qdrant_db" "/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/qdrant"
-    import_resource "azurerm_postgresql_database.spark_db" "/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/spark"
-fi
+# Import existing PostgreSQL databases
+log_and_time "import_resource azurerm_postgresql_database.airflow_db /subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_AIRFLOW_DB"
+log_and_time "import_resource azurerm_postgresql_database.superset_db /subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_SUPERSET_DB"
+log_and_time "import_resource azurerm_postgresql_database.hive_db /subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_HIVE_DB"
+log_and_time "import_resource azurerm_postgresql_database.mlflow_db /subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_MLFLOW_DB"
+log_and_time "import_resource azurerm_postgresql_database.haystack_db /subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_HAYSTACK_DB"
+log_and_time "import_resource azurerm_postgresql_database.zookeeper_db /subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_ZOOKEEPER_DB"
+log_and_time "import_resource azurerm_postgresql_database.kafka_db /subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_KAFKA_DB"
+log_and_time "import_resource azurerm_postgresql_database.pgadmin_db /subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_PGADMIN_DB"
+log_and_time "import_resource azurerm_postgresql_database.trino_db /subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_TRINO_DB"
+log_and_time "import_resource azurerm_postgresql_database.qdrant_db /subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_QDRANT_DB"
+log_and_time "import_resource azurerm_postgresql_database.spark_db /subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_SPARK_DB"
 
 # Apply Terraform plan for VM setup
 echo "Creating Terraform plan for VM setup..."
@@ -210,13 +227,30 @@ log_and_time "terraform plan -parallelism=10 -out=tfplan"
 echo "Applying Terraform plan for VM setup..."
 log_and_time "terraform apply -parallelism=10 -auto-approve tfplan"
 
+# Extract the storage account key from Terraform output
+STORAGE_ACCOUNT_KEY=$(terraform output -json storage_account_key | jq -r '.value')
+
+# Check if the .env file exists
+if [ ! -f ../.env ]; then
+  touch ../.env
+fi
+
+# Update the .env file with the storage account key
+if grep -q "AZURE_ACCOUNT_KEY" ../.env; then
+  sed -i "s|^AZURE_ACCOUNT_KEY=.*|AZURE_ACCOUNT_KEY=${STORAGE_ACCOUNT_KEY}|" ../.env
+else
+  echo "AZURE_ACCOUNT_KEY=${STORAGE_ACCOUNT_KEY}" >> ../.env
+fi
+
+echo "Updated .env file with storage account key."
+
 # Fetch the public IP output from Terraform
 PUBLIC_IP=$(terraform output -raw public_ip)
 echo "VM Public IP: $PUBLIC_IP"
 
 # Wait for the VM to be in 'running' state
 echo "Waiting for VM to be in 'running' state..."
-while [ "$(az vm get-instance-view --name myVM --resource-group $RESOURCE_GROUP_NAME --query "instanceView.statuses[?code=='PowerState/running'] | [0].code" --output tsv)" != "PowerState/running" ]; do
+while [ "$(az vm get-instance-view --name $VIRTUAL_MACHINE_NAME --resource-group $RESOURCE_GROUP_NAME --query "instanceView.statuses[?code=='PowerState/running'] | [0].code" --output tsv)" != "PowerState/running" ]; do
     echo "Waiting for VM to be running..."
     sleep 10
 done
@@ -259,7 +293,6 @@ sudo apt-get install -y gh
 
 # Create project directory if it does not exist
 mkdir -p /home/azureuser/projects/capstone-project-nelo-mlb-stats
-
 EOF
 
 # Copy the project files to the VM
@@ -275,7 +308,7 @@ echo "Setup complete. You can now access your VM at $PUBLIC_IP"
 
 # Apply Terraform plan for PostgreSQL databases
 echo "Creating Terraform plan for PostgreSQL databases..."
-log_and_time "terraform plan -out=tfplan-postgres -var=\"admin_username=$AZURE_POSTGRES_USERNAME\" -var=\"admin_password=$AZURE_POSTGRES_PASSWORD\" -var=\"airflow_db=airflow\" -var=\"superset_db=superset\" -var=\"hive_db=hive\" -var=\"mlflow_db=mlflow\" -var=\"haystack_db=haystack\" -var=\"zookeeper_db=zookeeper\" -var=\"kafka_db=kafka\" -var=\"pgadmin_db=pgadmin\" -var=\"trino_db=trino\" -var=\"qdrant_db=qdrant\" -var=\"spark_db=spark\""
+log_and_time "terraform plan -out=tfplan-postgres -var="admin_username=$AZURE_POSTGRES_USERNAME" -var="admin_password=$AZURE_POSTGRES_PASSWORD" -var="airflow_db=$AZURE_AIRFLOW_DB" -var="superset_db=$AZURE_SUPERSET_DB" -var="hive_db=$AZURE_HIVE_DB" -var="mlflow_db=$AZURE_MLFLOW_DB" -var="haystack_db=$AZURE_HAYSTACK_DB" -var="zookeeper_db=$AZURE_ZOOKEEPER_DB" -var="kafka_db=$AZURE_KAFKA_DB" -var="pgadmin_db=$AZURE_PGADMIN_DB" -var="trino_db=$AZURE_TRINO_DB" -var="qdrant_db=$AZURE_QDRANT_DB" -var="spark_db=$AZURE_SPARK_DB""
 
 echo "Applying Terraform plan for PostgreSQL databases..."
 log_and_time "terraform apply -auto-approve tfplan-postgres"
