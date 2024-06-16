@@ -4,6 +4,7 @@
 # MLB Game Stats Pipeline/Predictor/Chat-Bot
 
 ### Azure VM Setup
+##### Click the `Fork` button to create a copy of the repo in your GitHub account.
 ##### Follow instructions in `.github/workflows/terraform.yml` to set Azure environment variables.
 
 ##### Once your Azure environment variables are set in GitHub Secrets, go to `Actions` tab at top of repo, click on `Deploy` workflow and `click Run workflow`.
