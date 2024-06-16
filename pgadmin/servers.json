@@ -1,0 +1,94 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Airflow Postgres",
+      "Group": "Servers",
+      "Host": "${AZURE_POSTGRES_HOST}",
+      "Port": 5432,
+      "MaintenanceDB": "${AZURE_AIRFLOW_DB}",
+      "Username": "${AZURE_POSTGRES_USERNAME}",
+      "Password": "${AZURE_POSTGRES_PASSWORD}",
+      "SSLMode": "prefer"
+    },
+    "2": {
+      "Name": "Superset Postgres",
+      "Group": "Servers",
+      "Host": "${AZURE_POSTGRES_HOST}",
+      "Port": 5432,
+      "MaintenanceDB": "${AZURE_SUPERSET_DB}",
+      "Username": "${AZURE_POSTGRES_USERNAME}",
+      "Password": "${AZURE_POSTGRES_PASSWORD}",
+      "SSLMode": "prefer"
+    },
+    "3": {
+      "Name": "Hive Metastore Postgres",
+      "Group": "Servers",
+      "Host": "${AZURE_POSTGRES_HOST}",
+      "Port": 5432,
+      "MaintenanceDB": "${AZURE_HIVE_DB}",
+      "Username": "${AZURE_POSTGRES_USERNAME}",
+      "Password": "${AZURE_POSTGRES_PASSWORD}",
+      "SSLMode": "prefer"
+    },
+    "4": {
+      "Name": "Haystack Postgres",
+      "Group": "Servers",
+      "Host": "${AZURE_POSTGRES_HOST}",
+      "Port": 5432,
+      "MaintenanceDB": "${AZURE_HAYSTACK_DB}",
+      "Username": "${AZURE_POSTGRES_USERNAME}",
+      "Password": "${AZURE_POSTGRES_PASSWORD}",
+      "SSLMode": "prefer"
+    },
+    "5": {
+      "Name": "MLflow Postgres",
+      "Group": "Servers",
+      "Host": "${AZURE_POSTGRES_HOST}",
+      "Port": 5432,
+      "MaintenanceDB": "${AZURE_MLFLOW_DB}",
+      "Username": "${AZURE_POSTGRES_USERNAME}",
+      "Password": "${AZURE_POSTGRES_PASSWORD}",
+      "SSLMode": "prefer"
+    },
+    "6": {
+      "Name": "Kafka Postgres",
+      "Group": "Servers",
+      "Host": "${AZURE_POSTGRES_HOST}",
+      "Port": 5432,
+      "MaintenanceDB": "${AZURE_KAFKA_DB}",
+      "Username": "${AZURE_POSTGRES_USERNAME}",
+      "Password": "${AZURE_POSTGRES_PASSWORD}",
+      "SSLMode": "prefer"
+    },
+    "7": {
+      "Name": "Zookeeper Postgres",
+      "Group": "Servers",
+      "Host": "${AZURE_POSTGRES_HOST}",
+      "Port": 5432,
+      "MaintenanceDB": "${AZURE_ZOOKEEPER_DB}",
+      "Username": "${AZURE_POSTGRES_USERNAME}",
+      "Password": "${AZURE_POSTGRES_PASSWORD}",
+      "SSLMode": "prefer"
+    },
+    "8": {
+      "Name": "Trino Postgres",
+      "Group": "Servers",
+      "Host": "${AZURE_POSTGRES_HOST}",
+      "Port": 5432,
+      "MaintenanceDB": "${AZURE_TRINO_DB}",
+      "Username": "${AZURE_POSTGRES_USERNAME}",
+      "Password": "${AZURE_POSTGRES_PASSWORD}",
+      "SSLMode": "prefer"
+    },
+    "9": {
+      "Name": "Qdrant Postgres",
+      "Group": "Servers",
+      "Host": "${AZURE_POSTGRES_HOST}",
+      "Port": 5432,
+      "MaintenanceDB": "${AZURE_QDRANT_DB}",
+      "Username": "${AZURE_POSTGRES_USERNAME}",
+      "Password": "${AZURE_POSTGRES_PASSWORD}",
+      "SSLMode": "prefer"
+    }
+  }
+}
