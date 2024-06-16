@@ -1,0 +1,236 @@
+# Instructions to obtain Azure credentials and set up GitHub secrets:
+
+# 1. Azure Subscription ID:
+#    - Navigate to the Azure portal (https://portal.azure.com).
+#    - In the left sidebar, click on "Subscriptions".
+#    - Select the subscription you want to use.
+#    - The Subscription ID will be displayed at the top of the subscription overview page.
+
+# 2. Tenant ID:
+#    - In the Azure portal, go to "Azure Active Directory".
+#    - In the overview section, you will find the Tenant ID.
+
+# 3. Client ID and Client Secret (Service Principal):
+#    - Go to "Azure Active Directory" in the Azure portal.
+#    - In the left sidebar, click on "App registrations".
+#    - Click on "New registration".
+#        - Name: Give your application a name.
+#        - Supported account types: Select "Accounts in this organizational directory only".
+#        - Redirect URI: You can leave this blank for now.
+#    - Click "Register".
+#    - Once registered, you will be redirected to the application's overview page where you will see the Application (client) ID. This is your ARM_CLIENT_ID.
+#    - Next, click on "Certificates & secrets" in the left sidebar.
+#    - Under "Client secrets", click "New client secret".
+#    - Add a description and select the expiry period, then click "Add".
+#    - The new client secret will be displayed. Copy the Value immediately; this is your ARM_CLIENT_SECRET. You won't be able to see it again once you navigate away.
+
+# 4. Admin Username and Password:
+#    - These are the credentials you want to set for the admin user on your Azure VM. You can choose any username and password you prefer. Make sure to store them securely.
+
+# Setting Up Secrets in GitHub:
+
+# 1. Go to your repository on GitHub.
+# 2. Click on "Settings".
+# 3. In the left sidebar, click on "Secrets and variables" > "Actions".
+# 4. Click on "New repository secret" for each secret and add the corresponding value:
+#    - ARM_CLIENT_ID
+#    - ARM_CLIENT_SECRET
+#    - ARM_SUBSCRIPTION_ID
+#    - ARM_TENANT_ID
+#    - ADMIN_USERNAME
+#    - ADMIN_PASSWORD
+
+# Example of Adding a Secret in GitHub:
+# - Secret name: ARM_CLIENT_ID
+# - Secret value: <your-client-id>
+
+# Repeat the above steps for each of the required secrets.
+
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+    
+      - name: Set up environment variables
+        run: |
+          echo "ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.ARM_CLIENT_SECRET }}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+          echo "ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}" >> $GITHUB_ENV
+          echo "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" >> $GITHUB_ENV
+          echo "STORAGE_ACCOUNT_NAME=${{ secrets.STORAGE_ACCOUNT_NAME }}" >> $GITHUB_ENV
+          echo "VAULT_ADDR=${{ secrets.VAULT_ADDR }}" >> $GITHUB_ENV
+          echo "VAULT_TOKEN=${{ secrets.VAULT_TOKEN }}" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gnupg software-properties-common curl jq
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          sudo apt-get update
+          sudo apt-get install -y terraform
+          curl -sL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /usr/share/keyrings/microsoft-archive-keyring.gpg > /dev/null
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-archive-keyring.gpg] https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/azure-cli.list
+          sudo apt-get update
+          sudo apt-get install -y azure-cli
+          sudo apt-get install -y sshpass
+          sudo apt-get install -y vault
+
+      - name: Start Vault and set environment variables
+        run: |
+          vault server -dev -dev-root-token-id="root" &
+          sleep 10
+          export VAULT_ADDR='http://127.0.0.1:8200'
+          export VAULT_TOKEN='root'
+          NEW_VAULT_TOKEN=$(vault token create -ttl=1h -field token)
+          echo "VAULT_TOKEN=$NEW_VAULT_TOKEN" >> $GITHUB_ENV
+          vault kv put secret/data/postgres username="<YOUR_USERNAME_HERE>" password="<YOUR_PASSWORD_HERE>"
+
+      - name: Login to Azure CLI
+        run: |
+          az login --service-principal -u "${{ secrets.ARM_CLIENT_ID }}" -p "${{ secrets.ARM_CLIENT_SECRET }}" --tenant "${{ secrets.ARM_TENANT_ID }}"
+          az account set --subscription "${{ secrets.ARM_SUBSCRIPTION_ID }}"
+
+      - name: Set execute permissions for setup.sh
+        run: chmod +x setup.sh
+
+      - name: Run setup script
+        run: ./setup.sh
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Deploy with Terraform
+        run: |
+          cd terraform-azure-vm-setup
+          terraform init
+          
+          # Function to import resource if it exists
+          import_resource() {
+            local resource_type=$1
+            local resource_id=$2
+
+            if az resource show --ids "$resource_id" &> /dev/null; then
+              echo "$resource_type $resource_id already exists. Importing to Terraform..."
+              terraform import $resource_type "$resource_id"
+            fi
+          }
+
+          # Set the resource IDs
+          RESOURCE_GROUP_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup"
+          STORAGE_ACCOUNT_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.Storage/storageAccounts/${{ secrets.STORAGE_ACCOUNT_NAME }}"
+          VNET_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.Network/virtualNetworks/myVnet"
+          SUBNET_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.Network/virtualNetworks/myVnet/subnets/mySubnet"
+          NSG_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.Network/networkSecurityGroups/myNsg"
+          NIC_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.Network/networkInterfaces/myNic"
+          VM_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.Compute/virtualMachines/myVM"
+          DISK_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.Compute/disks/myOsDisk"
+          POSTGRES_SERVER_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server"
+
+          # Import existing resources if they exist
+          import_resource "azurerm_resource_group.rg" "$RESOURCE_GROUP_ID"
+          import_resource "azurerm_storage_account.storage" "$STORAGE_ACCOUNT_ID"
+          import_resource "azurerm_virtual_network.vnet" "$VNET_ID"
+          import_resource "azurerm_subnet.subnet" "$SUBNET_ID"
+          import_resource "azurerm_network_security_group.nsg" "$NSG_ID"
+          import_resource "azurerm_network_interface.nic" "$NIC_ID"
+          import_resource "azurerm_virtual_machine.vm" "$VM_ID"
+
+          # Special handling for existing disk
+          if az resource show --ids "$DISK_ID" &> /dev/null; then
+            echo "Disk $DISK_ID already exists. Using attach option for the VM..."
+            terraform import azurerm_managed_disk.my_disk "$DISK_ID"
+          fi
+
+          # Special handling for existing PostgreSQL server
+          if az resource show --ids "$POSTGRES_SERVER_ID" &> /dev/null; then
+            echo "PostgreSQL server $POSTGRES_SERVER_ID already exists. Importing to Terraform..."
+            terraform import azurerm_postgresql_server.postgres_server "$POSTGRES_SERVER_ID"
+
+            # Import existing PostgreSQL databases
+            import_resource "azurerm_postgresql_database.airflow_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/airflow"
+            import_resource "azurerm_postgresql_database.superset_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/superset"
+            import_resource "azurerm_postgresql_database.hive_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/hive"
+            import_resource "azurerm_postgresql_database.mlflow_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/mlflow"
+            import_resource "azurerm_postgresql_database.haystack_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/haystack"
+            import_resource "azurerm_postgresql_database.zookeeper_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/zookeeper"
+            import_resource "azurerm_postgresql_database.kafka_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/kafka"
+            import_resource "azurerm_postgresql_database.pgadmin_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/pgadmin"
+            import_resource "azurerm_postgresql_database.trino_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/trino"
+            import_resource "azurerm_postgresql_database.qdrant_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/qdrant"
+            import_resource "azurerm_postgresql_database.spark_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/spark"
+          fi
+
+          terraform plan -out=tfplan
+          terraform apply -auto-approve tfplan
+          PUBLIC_IP=$(terraform output -raw public_ip)
+          echo "PUBLIC_IP=${PUBLIC_IP}" >> $GITHUB_ENV
+
+      - name: Deploy PostgreSQL
+        run: |
+          cd terraform-azure-vm-setup
+          terraform init -backend-config=postgres.tf
+          terraform plan -out=tfplan
+          terraform apply -auto-approve tfplan
+
+  configure:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Wait for SSH
+        run: |
+          while ! nc -z ${{ env.PUBLIC_IP }} 22; do echo "Waiting for SSH to be available..."; sleep 10; done
+
+      - name: Configure VM
+        run: |
+          sshpass -p "$ADMIN_PASSWORD" ssh -o StrictHostKeyChecking=no -i terraform-azure-vm-setup/id_rsa azureuser@${{ env.PUBLIC_IP }} << 'EOF'
+          sudo apt-get update
+          sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
+          sudo apt-get update
+          sudo apt-get install -y docker-ce
+          sudo usermod -aG docker $(whoami)
+          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          curl -fsSL https://code-server.dev/install.sh | sh
+          sudo mkdir -p /etc/systemd/system/code-server@.service.d/
+          echo -e '[Service]\nEnvironment="PASSWORD=yourpassword"\nExecStart=\nExecStart=/usr/bin/code-server --bind-addr 0.0.0.0:8000' | sudo tee /etc/systemd/system/code-server@.service.d/override.conf
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now code-server@$(whoami)
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y gh
+          mkdir -p /home/azureuser/projects/capstone-project-nelo-mlb-stats
+          EOF
+
+      - name: Sync Project Files
+        run: |
+          rsync -avz --exclude 'terraform-azure-vm-setup' ./ azureuser@${{ env.PUBLIC_IP }}:/home/azureuser/projects/capstone-project-nelo-mlb-stats
+
+      - name: Start Docker Compose
+        run: |
+          sshpass -p "$ADMIN_PASSWORD" ssh -o StrictHostKeyChecking=no -i terraform-azure-vm-setup/id_rsa azureuser@${{ env.PUBLIC_IP }} << 'EOF'
+          cd /home/azureuser/projects/capstone-project-nelo-mlb-stats
+          docker-compose up -d
+          EOF
+
+      - name: Finish
+        run: echo "Setup complete. You can now access your VM at ${{ env.PUBLIC_IP }}"
