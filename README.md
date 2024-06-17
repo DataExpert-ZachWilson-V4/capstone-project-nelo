@@ -104,8 +104,7 @@ where:
 
 An optimized distributed gradient boosting library designed to be highly efficient, flexible, and portable. It uses a regularization term in its objective function to prevent overfitting, which is the sum of the loss function and the regularization term over all trees. This optimization leads to better model performance and scalability.
 
-$\ell = \sum_{i=1}^{n} \ell(y_i, \hat{y}_i) + \sum_{k=1}^{K} \Omega(f_k)$
-
+![XGBOOST](/XGBOOST.png)
 
 where:
 - $\ell$ is the loss function
