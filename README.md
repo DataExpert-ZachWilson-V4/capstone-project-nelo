@@ -3,7 +3,7 @@
 
 # MLB Game Stats Pipeline/Predictor/Chat-Bot
 
-
+![MLB Diagram](/MLB_Diagram.png)
 
 I used Ubuntu with Windows Subsystem for Linux (WSL 2), Docker Desktop and VS Code to complete this project.
 
