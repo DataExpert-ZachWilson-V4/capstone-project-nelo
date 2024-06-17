@@ -1,43 +1,5 @@
 #!/bin/bash
 
-## Instructions to obtain Azure credentials:
-
-# 1. Azure Subscription ID:
-#    - Navigate to the Azure portal (https://portal.azure.com).
-#    - In the left sidebar, click on "Subscriptions".
-#    - Select the subscription you want to use.
-#    - The Subscription ID will be displayed at the top of the subscription overview page.
-
-# 2. Tenant ID:
-#    - In the Azure portal, go to "Azure Active Directory".
-#    - In the overview section, you will find the Tenant ID.
-
-# 3. Client ID and Client Secret (Service Principal):
-#    - Go to "Azure Active Directory" in the Azure portal.
-#    - In the left sidebar, click on "App registrations".
-#    - Click on "New registration".
-#        - Name: Give your application a name.
-#        - Supported account types: Select "Accounts in this organizational directory only".
-#        - Redirect URI: You can leave this blank for now.
-#    - Click "Register".
-#    - Once registered, you will be redirected to the application's overview page where you will see the Application (client) ID. This is your ARM_CLIENT_ID.
-#    - Next, click on "Certificates & secrets" in the left sidebar.
-#    - Under "Client secrets", click "New client secret".
-#    - Add a description and select the expiry period, then click "Add".
-#    - The new client secret will be displayed. Copy the Value immediately; this is your ARM_CLIENT_SECRET. You won't be able to see it again once you navigate away.
-
-# 4. Admin Username and Password:
-#    - These are the credentials you want to set for the admin user on your Azure VM. You can choose any username and password you prefer. Make sure to store them securely.
-
-# save these variables in .env file
-
-#    - ARM_CLIENT_ID
-#    - ARM_CLIENT_SECRET
-#    - ARM_SUBSCRIPTION_ID
-#    - ARM_TENANT_ID
-#    - ADMIN_USERNAME
-#    - ADMIN_PASSWORD
-
 # Self-setting execute permissions
 if [ ! -x "$0" ]; then
   chmod +x "$0"
@@ -178,6 +140,21 @@ cp id_rsa* terraform-azure-vm-setup/
 cd terraform-azure-vm-setup
 log_and_time "terraform init"
 
+clean_terraform_state() {
+    local resource_type=$1
+    local resource_name=$2
+    local full_resource_address="${resource_type}.${resource_name}"
+
+    if terraform state list | grep -q "^$full_resource_address$"; then
+        echo "Resource $full_resource_address is already managed by Terraform. Removing from state..."
+        terraform state rm $full_resource_address
+    fi
+}
+
+# Clean Terraform state before managing resources
+clean_terraform_state "azurerm_resource_group" "main"
+clean_terraform_state "azurerm_storage_account" "storage"
+
 # Function to import resource if it exists
 import_resource() {
     local resource_type=$1
@@ -230,10 +207,10 @@ log_and_time "import_resource azurerm_postgresql_database.spark_db /subscription
 
 # Apply Terraform plan for VM setup
 echo "Creating Terraform plan for VM setup..."
-log_and_time "terraform plan -parallelism=15 -out=tfplan"
+log_and_time "terraform plan -out=tfplan"
 
 echo "Applying Terraform plan for VM setup..."
-log_and_time "terraform apply -parallelism=15 -auto-approve tfplan"
+log_and_time "terraform apply -auto-approve tfplan"
 
 # Check if the .env file exists
 if [ ! -f ../.env ]; then
@@ -257,14 +234,6 @@ while ! nc -z $PUBLIC_IP 22; do
     echo "Waiting for SSH to be available..."
     sleep 10
 done
-
-# Check VM agent status
-echo "Checking VM agent status..."
-VM_AGENT_STATUS=$(az vm get-instance-view --resource-group "$RESOURCE_GROUP_NAME" --name "$VIRTUAL_MACHINE_NAME" --query "instanceView.extensions[?type=='Microsoft.Azure.Extensions.CustomScript'].statuses[?code=='ProvisioningState/succeeded']" --output tsv)
-if [ "$VM_AGENT_STATUS" != "ProvisioningState/succeeded" ]; then
-  echo "VM agent is not ready. Please check the VM agent status manually."
-  exit 1
-fi
 
 # Connect to the VM and set up Docker, Docker Compose, and other dependencies
 ssh -o StrictHostKeyChecking=no -i id_rsa azureuser@$PUBLIC_IP << EOF
@@ -300,8 +269,7 @@ mkdir -p /home/azureuser/projects/capstone-project-nelo-mlb-stats
 EOF
 
 # Copy the project files to the VM
-log_and_time "rsync -avz --exclude 'terraform-azure-vm-setup' ./ azureuser@$PUBLIC_IP:/home/azureuser/projects/capstone-project-nelo-mlb-stats"
-
+rsync -avz --include '*' ./ azureuser@$PUBLIC_IP:/home/azureuser/projects/capstone-project-nelo-mlb-stats
 # Start services with Docker Compose on the VM
 ssh -o StrictHostKeyChecking=no -i id_rsa azureuser@$PUBLIC_IP << EOF
 cd /home/azureuser/projects/capstone-project-nelo-mlb-stats
