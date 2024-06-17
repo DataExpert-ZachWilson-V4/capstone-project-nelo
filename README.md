@@ -26,8 +26,6 @@ This automates the setup of Azure VM using Terraform and GitHub Actions. Install
 
 It waits for the VM to be in a running state, connects to it via SSH, installs Docker, Docker Compose, VS Code Server, and GitHub CLI, copies project files, and starts services with Docker Compose.
 
-The Vault token will be dynamically generated & stored in .env file.
-
 #### Keep in mind to save these in .env file
 
 `RESOURCE_GROUP_NAME`
