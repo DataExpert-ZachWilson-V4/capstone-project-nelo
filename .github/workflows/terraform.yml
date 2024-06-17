@@ -26,11 +26,10 @@
 
 # 4. Admin Username and Password:
 #    - These are the credentials you want to set for the admin user on your Azure VM. You can choose any username and password you prefer. Make sure to store them securely.
-
 # 5. VAULT TOKEN:
-#    - The Vault Token is dynamically generated and stored in .env file
-#    - Add the secret with the name VAULT_TOKEN and the value as your Vault token.
-
+#    - The Vault server starts in dev mode with a specified root token, and the address and token are set as environment variables. 
+#    - Vault is then initialized, capturing the response to extract unseal keys and a new root token, which is used to unseal Vault. 
+#    - The new root token is stored in the GitHub Actions environment, ensuring secure authentication for subsequent steps without exposing the token in plain text.
 # Setting Up Secrets in GitHub:
 
 # 1. Go to your repository on GitHub.
@@ -62,18 +61,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up environment variables
-        run: |
-          echo "ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_SECRET=${{ secrets.ARM_CLIENT_SECRET }}" >> $GITHUB_ENV
-          echo "ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
-          echo "ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }}" >> $GITHUB_ENV
-          echo "ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}" >> $GITHUB_ENV
-          echo "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" >> $GITHUB_ENV
-          echo "STORAGE_ACCOUNT_NAME=${{ secrets.STORAGE_ACCOUNT_NAME }}" >> $GITHUB_ENV
-          echo "VAULT_ADDR=${{ secrets.VAULT_ADDR }}" >> $GITHUB_ENV
-          echo "VAULT_TOKEN=${{ secrets.VAULT_TOKEN }}" >> $GITHUB_ENV
-
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -89,15 +76,28 @@ jobs:
           sudo apt-get install -y sshpass
           sudo apt-get install -y vault
 
-      - name: Start Vault and set environment variables
+      - name: Start Vault
         run: |
           vault server -dev -dev-root-token-id="root" &
           sleep 10
           export VAULT_ADDR='http://127.0.0.1:8200'
           export VAULT_TOKEN='root'
-          NEW_VAULT_TOKEN=$(vault token create -ttl=1h -field token)
-          echo "VAULT_TOKEN=$NEW_VAULT_TOKEN" >> $GITHUB_ENV
-          vault kv put secret/data/postgres username="${{ secrets.ADMIN_USERNAME }}" password="${{ secrets.ADMIN_PASSWORD }}"
+          INIT_RESPONSE=$(vault operator init -key-shares=1 -key-threshold=1 -format=json)
+          UNSEAL_KEY=$(echo $INIT_RESPONSE | jq -r '.unseal_keys_b64[0]')
+          vault operator unseal $UNSEAL_KEY
+          ROOT_TOKEN=$(echo $INIT_RESPONSE | jq -r '.root_token')
+          echo "VAULT_TOKEN=$ROOT_TOKEN" >> $GITHUB_ENV
+
+      - name: Set up environment variables
+        run: |
+          echo "ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.ARM_CLIENT_SECRET }}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+          echo "ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}" >> $GITHUB_ENV
+          echo "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" >> $GITHUB_ENV
+          echo "STORAGE_ACCOUNT_NAME=${{ secrets.STORAGE_ACCOUNT_NAME }}" >> $GITHUB_ENV
+          echo "VAULT_ADDR=http://127.0.0.1:8200" >> $GITHUB_ENV
 
       - name: Login to Azure CLI
         run: |
