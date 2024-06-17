@@ -46,12 +46,6 @@ fi
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
-# Install jq if not installed
-if ! command -v jq &> /dev/null; then
-  sudo apt-get update
-  sudo apt-get install -y jq
-fi
-
 # Load environment variables from .env file
 if [ -f .env ]; then
   echo "Loading environment variables from .env file..."
@@ -115,14 +109,6 @@ install_dependencies() {
         sudo apt-get update
         sudo apt-get install -y sshpass
     fi
-
-    if ! command_exists vault; then
-        echo "Vault is not installed. Installing Vault..."
-        curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-        sudo apt-get update
-        sudo apt-get install -y vault
-    fi
 }
 
 # Logging function to track the time taken by each step
@@ -137,27 +123,6 @@ log_and_time() {
 
 # Install dependencies
 log_and_time "install_dependencies"
-
-# Check if VAULT_TOKEN is set in .env file
-if [ -z "$VAULT_TOKEN" ]; then
-    # Start Vault server in dev mode for demonstration purposes
-    vault server -dev -dev-root-token-id="root" &
-    # Wait for Vault to start
-    sleep 10
-    # Set Vault environment variables
-    export VAULT_TOKEN='root'
-    # Generate a new Vault token
-    NEW_VAULT_TOKEN=$(vault token create -ttl=1h -field token)
-    # Write the new Vault token to the .env file
-    echo "VAULT_TOKEN=$NEW_VAULT_TOKEN" >> .env
-    export VAULT_TOKEN=$NEW_VAULT_TOKEN
-else
-    # Export existing VAULT_TOKEN from .env file
-    export VAULT_TOKEN
-fi
-
-# Store the PostgreSQL credentials in Vault
-log_and_time "vault kv put secret/data/postgres username='$AZURE_POSTGRES_USERNAME' password='$AZURE_POSTGRES_PASSWORD'"
 
 # Login to Azure CLI using Service Principal
 echo "Logging into Azure CLI using service principal..."
@@ -250,7 +215,6 @@ log_and_time "import_resource azurerm_managed_disk.my_disk $DISK_ID"
 log_and_time "import_resource azurerm_postgresql_server.postgres_server $POSTGRES_SERVER_ID"
 log_and_time "import_resource azurerm_storage_container.container $CONTAINER_ID"
 
-
 # Import existing PostgreSQL databases
 log_and_time "import_resource azurerm_postgresql_database.airflow_db /subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_AIRFLOW_DB"
 log_and_time "import_resource azurerm_postgresql_database.superset_db /subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_SUPERSET_DB"
@@ -266,27 +230,15 @@ log_and_time "import_resource azurerm_postgresql_database.spark_db /subscription
 
 # Apply Terraform plan for VM setup
 echo "Creating Terraform plan for VM setup..."
-log_and_time "terraform plan -parallelism=10 -out=tfplan"
+log_and_time "terraform plan -parallelism=15 -out=tfplan"
 
 echo "Applying Terraform plan for VM setup..."
-log_and_time "terraform apply -parallelism=10 -auto-approve tfplan"
-
-# Extract the storage account key from Terraform output
-STORAGE_ACCOUNT_KEY=$(terraform output -json storage_account_key | jq -r '.storage_account_key.value')
+log_and_time "terraform apply -parallelism=15 -auto-approve tfplan"
 
 # Check if the .env file exists
 if [ ! -f ../.env ]; then
   touch ../.env
 fi
-
-# Update the .env file with the storage account key
-if grep -q "AZURE_ACCOUNT_KEY" ../.env; then
-  sed -i "s|^AZURE_ACCOUNT_KEY=.*|AZURE_ACCOUNT_KEY=${STORAGE_ACCOUNT_KEY}|" ../.env
-else
-  echo "AZURE_ACCOUNT_KEY=${STORAGE_ACCOUNT_KEY}" >> ../.env
-fi
-
-echo "Updated .env file with storage account key."
 
 # Fetch the public IP output from Terraform
 PUBLIC_IP=$(terraform output -raw public_ip)
@@ -305,6 +257,14 @@ while ! nc -z $PUBLIC_IP 22; do
     echo "Waiting for SSH to be available..."
     sleep 10
 done
+
+# Check VM agent status
+echo "Checking VM agent status..."
+VM_AGENT_STATUS=$(az vm get-instance-view --resource-group "$RESOURCE_GROUP_NAME" --name "$VIRTUAL_MACHINE_NAME" --query "instanceView.extensions[?type=='Microsoft.Azure.Extensions.CustomScript'].statuses[?code=='ProvisioningState/succeeded']" --output tsv)
+if [ "$VM_AGENT_STATUS" != "ProvisioningState/succeeded" ]; then
+  echo "VM agent is not ready. Please check the VM agent status manually."
+  exit 1
+fi
 
 # Connect to the VM and set up Docker, Docker Compose, and other dependencies
 ssh -o StrictHostKeyChecking=no -i id_rsa azureuser@$PUBLIC_IP << EOF
