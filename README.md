@@ -26,7 +26,7 @@ This automates the setup of Azure VM using Terraform and GitHub Actions. Install
 
 Vault token will be dynamically generated & stored in .env file.
 
-* Keep in mind to save these in .env file * (RESOURCE_GROUP_NAME, STORAGE_ACCOUNT_NAM,E ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID, ARM_SUBSCRIPTION_ID)
+* Keep in mind to save these in .env file (RESOURCE_GROUP_NAME, STORAGE_ACCOUNT_NAM,E ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID, ARM_SUBSCRIPTION_ID)
 
 ### When done:
 #### Clean Up Docker Environment
