@@ -22,6 +22,155 @@ This project involves fetching historical & current MLB game stats from MLB.com 
 
 ## ML Process
 
+### Feature Selection
+#### Lasso Regression
+
+Also known as Least Absolute Shrinkage and Selection Operator, performs L1 regularization, which adds a penalty equal to the absolute value of the magnitude of the coefficients. This penalty forces some coefficients to become exactly zero, thus eliminating less important features from the model. By doing so, Lasso Regression helps in identifying the most significant features, such as runs, hits, and strikeouts, that are most relevant in predicting MLB game scores and outcomes over time.
+
+$\hat{\beta} = \arg\min_{\beta} \left( \sum_{i=1}^{n} (y_i - X_i\beta)^2 + \lambda \sum_{j=1}^{p} |\beta_j| \right)$
+
+where:
+- $y_i$ is the response variable
+- $X_i$ is the predictor variables
+- $\beta$ are the coefficients
+- $\lambda$ is the regularization parameter
+
+#### Random Forest
+
+Is an ensemble learning method that constructs multiple decision trees and outputs the mean prediction of the individual trees. It is known for handling a large number of features and reducing overfitting by averaging multiple decision trees. The prediction is calculated as the average of the predictions from all the decision trees.
+
+$\hat{y} = \frac{1}{N} \sum_{i=1}^{N} T_i(x)$
+
+where:
+- $T_i(x)$ is the $i$-th decision tree
+- $N$ is the number of trees
+
+### Hyperparameter Tuning
+#### Bayesian Optimization
+
+Used to find the optimal parameters for the models by maximizing an objective function, which is typically the negative mean squared error in regression tasks. It starts by initializing with a few random hyperparameter sets to get an initial sense of the hyperparameter space. It then evaluates the objective function, typically the negative mean squared error, for these initial sets to understand their performance. In an iterative process, Bayesian Optimization updates a surrogate model based on the results of these evaluations, and uses an acquisition function to select new hyperparameters that balance exploration of the hyperparameter space with exploitation of known good areas. This process continues until it converges to the set of hyperparameters that yields the best model performance
+
+For CatBoost, the parameter space includes `iterations`, `depth`, `learning_rate`, and `l2_leaf_reg`. Key hyperparameters for XGBoost include `n_estimators`, `max_depth`, `learning_rate`, `subsample`, and `colsample_bytree`. For LightGBM, hyperparameters like `num_leave`s, `max_depth`, `learning_rate`, `n_estimators`, and `min_child_samples` are tuned. And hyperparameters for AdaBoost such as `n_estimators` and `learning_rate` are optimized. Bayesian Optimization ensures that the weak learners combined in AdaBoost are tuned for the best performance.
+
+$\text{Objective Function} = -\text{mean squared error}(y_{\text{train}}, \hat{y}_{\text{train}})$
+
+### Models Training
+#### AdaBoost
+
+Or Adaptive Boosting, combines multiple weak learners to create a strong learner. It assigns higher weights to incorrectly predicted instances, focusing more on hard-to-predict cases in subsequent iterations. The final prediction is a weighted sum of the weak learners' predictions.
+
+$f(x) = \sum_{t=1}^{T} \alpha_t h_t(x)$
+
+where:
+- $\alpha_t$ is the weight assigned to $t$-th weak learner
+- $h_t(x)$ is the $t$-th weak learner
+- $T$ is the total number of learners
+
+#### XGBoost
+
+An optimized distributed gradient boosting library designed to be highly efficient, flexible, and portable. It uses a regularization term in its objective function to prevent overfitting, which is the sum of the loss function and the regularization term over all trees. This optimization leads to better model performance and scalability.
+
+$$ \ell = \sum_{i=1}^{n} \ell(y_i, \hat{y}_i) + \sum_{k=1}^{K} \Omega(f_k) $$
+
+where:
+- $\ell$ is the loss function
+- $\Omega$ is the regularization term
+- $f_k$ is the $k$-th tree
+- $K$ is the number of trees
+
+#### LightGBM
+A gradient boosting framework that uses tree-based learning algorithms. It is designed to be distributed and efficient, capable of handling large datasets with high performance. LightGBM reduces memory usage and improves execution speed through techniques like histogram-based algorithms and leaf-wise tree growth.
+
+$\hat{y} = \sum_{m=1}^{M} f_m(x)$
+
+where:
+- $f_m(x)$ is the $m$-th tree
+- $M$ is the number of trees
+
+#### Multi-Variate Linear Regression
+
+Predicts a single target (e.g. game stat) variable using multiple predictor variables. 
+
+$Y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_p X_p + \epsilon$
+
+where:
+- $Y$ is the dependent variable (target variable).
+- $X_1, X_2, \ldots, X_p$ are the independent variables (predictor variables).
+- $\beta_0$ is the intercept term.
+- $\beta_1, \beta_2, \ldots, \beta_p$ are the coefficients of the independent variables.
+- $\epsilon$ is the error term (residuals).
+
+#### CatBoost
+
+A gradient boosting algorithm that handles categorical features effectively and reduces the need for extensive hyperparameter tuning. It constructs an ensemble of decision trees, where each tree is fit on the residuals of the previous trees. CatBoost is efficient in handling categorical variables without extensive preprocessing and speeds up training while reducing overfitting.
+
+$F(x) = \sum_{t=1}^{T} \gamma_t G_t(x)$
+
+where:
+- $\gamma_t$ is the learning rate
+- $G_t(x)$ is the $t$-th gradient boosted tree
+- $T$ is the total number of trees
+
+#### Stacking Regressor
+
+Also known as a MetaRegressor, combines multiple base regressors—AdaBoost, XGBoost, Linear Regression, and LightGBM—by using CatBoost as the meta-regressor. Each base regressor is individually trained on the data, and their predictions are then used as input features for CatBoost. 
+I want to see if Catboost will learn how to integrate the predictions from the base models to possibly provide a more accurate prediction compared to each individual model. Let's test this theory.
+
+### Cross-Validations
+#### Time Series Split
+
+A cross-validation technique used when dealing with time series data. It ensures that the training set always precedes the test set in time, thereby preventing data leakage. The data is split into $k$ consecutive folds, and each fold is used as a test set once while the preceding observations are used as the training set.
+
+$\{(X_t, Y_t)\}_{t=1}^{T}$ is the time series data, where $X_t$ represents the features and $Y_t$ represents the target variable at time $t$. The splits are defined as follows:
+
+- ${Fold 1:}$ & \{(X_t, Y_t)\}_{t=1}^{T_1}, \{(X_t, Y_t)\}_{t=T_1+1}^{T_2}
+- ${Fold 2:}$ & \{(X_t, Y_t)\}_{t=1}^{T_2}, \{(X_t, Y_t)\}_{t=T_2+1}^{T_3}
+- ${Fold k:}$ & \{(X_t, Y_t)\}_{t=1}^{T_{k-1}}, \{(X_t, Y_t)\}_{t=T_{k-1}+1}^{T_k}
+
+where $T_i$ are the split points. For each fold, the model is trained on the training set and evaluated on the test set. The performance metric, such as Mean Squared Error (MSE), is averaged across all folds to give the final evaluation metric.
+
+#### Monte Carlo Cross-Validation
+
+Also known as Shuffle-Split Cross-Validation, involves randomly splitting the dataset into training and test sets multiple times and evaluating the model on each split. This method helps to assess the stability and variability of the model’s performance.
+
+Given a dataset $\{(X_i, Y_i)\}_{i=1}^{n}$, Monte Carlo Cross-Validation involves the following steps:
+
+- Randomly split the dataset into a training set $\mathcal{T}_j$ and a test set $\mathcal{V}_j$ for $j = 1, 2, \ldots, m$.
+- Train the model on the training set $\mathcal{T}_j$.
+- Evaluate the model on the test set $\mathcal{V}_j$.
+- Repeat steps 1-3 $m$ times.
+
+The performance metric, such as Mean Squared Error (MSE), is computed for each split:
+
+{MSE}_j = \frac{1}{|\mathcal{V}_j|} \sum_{(X_i, Y_i) \in \mathcal{V}_j} (Y_i - \hat{Y}_i)^2
+
+where $\hat{Y}_i$ is the predicted value of $Y_i$.
+
+The final performance metric is the average of the MSE values over all splits:
+
+{Average MSE} = \frac{1}{m} \sum_{j=1}^{m} \text{MSE}_j
+
+where:
+- $m$ is the number of splits.
+- $\mathcal{T}_j$ is the training set for the $j$-th split.
+- $\mathcal{V}_j$ is the test set for the $j$-th split.
+- $|\mathcal{V}_j|$ is the number of observations in the $j$-th test set.
+
+- $(X_t, Y_t)$: Feature and target variable at time $t$.
+- $T_i$: Split points for Time Series Split.
+- $\mathcal{T}_j$: Training set for the $j$-th split in Monte Carlo Cross-Validation.
+- $\mathcal{V}_j$: Test set for the $j$-th split in Monte Carlo Cross-Validation.
+- $\text{MSE}_j$: Mean Squared Error for the $j$-th split.
+- $\hat{Y}_i$: Predicted value of $Y_i$.
+- $m$: Number of splits in Monte Carlo Cross-Validation.
+- $n$: Total number of observations.
+
+#### Predictions & Model Metrics
+
+Predictions are stored in Iceberg tables, with the data and metadata for these tables stored in Azure Data Lake Storage container. 
+
+And the models, with their metrics, are logged using MLflow.
+
 ## RAG Model/Chat UI Process
 
 ![MLB Diagram](/MLB_Diagram.png)
