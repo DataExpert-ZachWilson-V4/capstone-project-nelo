@@ -417,7 +417,8 @@ resource "azurerm_network_security_group" "nsg" {
     destination_port_range     = "5555"
     source_address_prefix      = "*"
     destination_address_prefix = "*"
-
+  }
+  
   security_rule {
     name                       = "Redis"
     priority                   = 1027
