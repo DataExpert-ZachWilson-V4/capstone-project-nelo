@@ -269,7 +269,8 @@ mkdir -p /home/azureuser/projects/capstone-project-nelo-mlb-stats
 EOF
 
 # Copy the project files to the VM
-rsync -avz --include '*' ./ azureuser@$PUBLIC_IP:/home/azureuser/projects/capstone-project-nelo-mlb-stats
+rsync -avz --include '.*' --include '*' ./ azureuser@$PUBLIC_IP:/home/azureuser/projects/capstone-project-nelo-mlb-stats
+
 # Start services with Docker Compose on the VM
 ssh -o StrictHostKeyChecking=no -i id_rsa azureuser@$PUBLIC_IP << EOF
 cd /home/azureuser/projects/capstone-project-nelo-mlb-stats
