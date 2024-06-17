@@ -27,6 +27,10 @@
 # 4. Admin Username and Password:
 #    - These are the credentials you want to set for the admin user on your Azure VM. You can choose any username and password you prefer. Make sure to store them securely.
 
+# 5. VAULT TOKEN:
+#    - The Vault Token is dynamically generated and stored in .env file
+#    - Add the secret with the name VAULT_TOKEN and the value as your Vault token.
+
 # Setting Up Secrets in GitHub:
 
 # 1. Go to your repository on GitHub.
@@ -49,9 +53,6 @@
 name: Deploy
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
@@ -59,8 +60,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
-    
+        uses: actions/checkout@v3
+
       - name: Set up environment variables
         run: |
           echo "ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }}" >> $GITHUB_ENV
@@ -96,25 +97,31 @@ jobs:
           export VAULT_TOKEN='root'
           NEW_VAULT_TOKEN=$(vault token create -ttl=1h -field token)
           echo "VAULT_TOKEN=$NEW_VAULT_TOKEN" >> $GITHUB_ENV
-          vault kv put secret/data/postgres username="<YOUR_USERNAME_HERE>" password="<YOUR_PASSWORD_HERE>"
+          vault kv put secret/data/postgres username="${{ secrets.ADMIN_USERNAME }}" password="${{ secrets.ADMIN_PASSWORD }}"
 
       - name: Login to Azure CLI
         run: |
           az login --service-principal -u "${{ secrets.ARM_CLIENT_ID }}" -p "${{ secrets.ARM_CLIENT_SECRET }}" --tenant "${{ secrets.ARM_TENANT_ID }}"
           az account set --subscription "${{ secrets.ARM_SUBSCRIPTION_ID }}"
 
-      - name: Set execute permissions for setup.sh
-        run: chmod +x setup.sh
+      - name: Generate SSH key pair
+        run: |
+          ssh-keygen -t rsa -b 4096 -f id_rsa -q -N ""
+          echo "TF_VAR_ssh_public_key=$(cat id_rsa.pub)" >> $GITHUB_ENV
+          cp id_rsa* terraform-azure-vm-setup/
+
+      - name: Set execute permissions for trigger_workflow.sh
+        run: chmod +x trigger_workflow.sh
 
       - name: Run setup script
-        run: ./setup.sh
+        run: ./trigger_workflow.sh
 
   deploy:
     runs-on: ubuntu-latest
     needs: setup
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Deploy with Terraform
         run: |
@@ -133,15 +140,16 @@ jobs:
           }
 
           # Set the resource IDs
-          RESOURCE_GROUP_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup"
-          STORAGE_ACCOUNT_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.Storage/storageAccounts/${{ secrets.STORAGE_ACCOUNT_NAME }}"
-          VNET_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.Network/virtualNetworks/myVnet"
-          SUBNET_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.Network/virtualNetworks/myVnet/subnets/mySubnet"
-          NSG_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.Network/networkSecurityGroups/myNsg"
-          NIC_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.Network/networkInterfaces/myNic"
-          VM_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.Compute/virtualMachines/myVM"
-          DISK_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.Compute/disks/myOsDisk"
-          POSTGRES_SERVER_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server"
+          RESOURCE_GROUP_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME"
+          STORAGE_ACCOUNT_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Storage/storageAccounts/${{ secrets.STORAGE_ACCOUNT_NAME }}"
+          VNET_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Network/virtualNetworks/$VIRTUAL_NETWORK_NAME"
+          SUBNET_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Network/virtualNetworks/$VIRTUAL_NETWORK_NAME/subnets/$SUBNET_NAME"
+          NSG_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Network/networkSecurityGroups/$NETWORK_SECURITY_GROUP_NAME"
+          NIC_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Network/networkInterfaces/$NETWORK_INTERFACE_NAME"
+          VM_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Compute/virtualMachines/$VIRTUAL_MACHINE_NAME"
+          DISK_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Compute/disks/$DISK_NAME"
+          POSTGRES_SERVER_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME"
+          CONTAINER_ID="/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT_NAME/blobServices/default/containers/$AZURE_CONTAINER"
 
           # Import existing resources if they exist
           import_resource "azurerm_resource_group.rg" "$RESOURCE_GROUP_ID"
@@ -164,17 +172,17 @@ jobs:
             terraform import azurerm_postgresql_server.postgres_server "$POSTGRES_SERVER_ID"
 
             # Import existing PostgreSQL databases
-            import_resource "azurerm_postgresql_database.airflow_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/airflow"
-            import_resource "azurerm_postgresql_database.superset_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/superset"
-            import_resource "azurerm_postgresql_database.hive_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/hive"
-            import_resource "azurerm_postgresql_database.mlflow_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/mlflow"
-            import_resource "azurerm_postgresql_database.haystack_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/haystack"
-            import_resource "azurerm_postgresql_database.zookeeper_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/zookeeper"
-            import_resource "azurerm_postgresql_database.kafka_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/kafka"
-            import_resource "azurerm_postgresql_database.pgadmin_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/pgadmin"
-            import_resource "azurerm_postgresql_database.trino_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/trino"
-            import_resource "azurerm_postgresql_database.qdrant_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/qdrant"
-            import_resource "azurerm_postgresql_database.spark_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/myResourceGroup/providers/Microsoft.DBforPostgreSQL/servers/nelomlb-postgres-server/databases/spark"
+            import_resource "azurerm_postgresql_database.airflow_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_AIRFLOW_DB"
+            import_resource "azurerm_postgresql_database.superset_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_SUPERSET_DB"
+            import_resource "azurerm_postgresql_database.hive_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_HIVE_DB"
+            import_resource "azurerm_postgresql_database.mlflow_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_MLFLOW_DB"
+            import_resource "azurerm_postgresql_database.haystack_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_HAYSTACK_DB"
+            import_resource "azurerm_postgresql_database.zookeeper_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_ZOOKEEPER_DB"
+            import_resource "azurerm_postgresql_database.kafka_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_KAFKA_DB"
+            import_resource "azurerm_postgresql_database.pgadmin_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_PGADMIN_DB"
+            import_resource "azurerm_postgresql_database.trino_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_TRINO_DB"
+            import_resource "azurerm_postgresql_database.qdrant_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_QDRANT_DB"
+            import_resource "azurerm_postgresql_database.spark_db" "/subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.DBforPostgreSQL/servers/$POSTGRES_SERVER_NAME/databases/$AZURE_SPARK_DB"
           fi
 
           terraform plan -out=tfplan
