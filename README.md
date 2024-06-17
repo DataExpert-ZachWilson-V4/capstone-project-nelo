@@ -1,5 +1,5 @@
-# STILL IN PROGRESS
-# MORE UPDATES TO BE ADDED DAILY.
+## STILL IN PROGRESS
+## MORE UPDATES TO BE ADDED DAILY.
 
 # MLB Game Stats Pipeline/Predictor/Chat-Bot
 
@@ -22,11 +22,20 @@ I used Ubuntu with Windows Subsystem for Linux (WSL 2), Docker Desktop and VS Co
 
 Run `./trigger_workflow.sh`
 
-This automates the setup of Azure VM using Terraform and GitHub Actions. Installs tools (Terraform, Azure CLI, sshpass), logs into Azure, verifies subscription access, generates SSH keys, initializes Terraform, applies Terraform changes to create or update resources, and retrieves the VM's public IP address. Waits for the VM to be in a running state, connects to it via SSH, installs Docker, Docker Compose, VS Code Server, and GitHub CLI, copies project files, and starts services with Docker Compose.
+This automates the setup of Azure VM using Terraform and GitHub Actions. Installs tools (Terraform, Azure CLI, sshpass), logs into Azure, verifies subscription access, generates SSH keys, initializes Terraform, applies Terraform changes to create or update resources, and retrieves the VM's public IP address. 
 
-Vault token will be dynamically generated & stored in .env file.
+It waits for the VM to be in a running state, connects to it via SSH, installs Docker, Docker Compose, VS Code Server, and GitHub CLI, copies project files, and starts services with Docker Compose.
 
-* Keep in mind to save these in .env file (RESOURCE_GROUP_NAME, STORAGE_ACCOUNT_NAM,E ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID, ARM_SUBSCRIPTION_ID)
+The Vault token will be dynamically generated & stored in .env file.
+
+#### Keep in mind to save these in .env file
+
+`RESOURCE_GROUP_NAME`
+`STORAGE_ACCOUNT_NAME`
+`ARM_CLIENT_ID`
+`ARM_CLIENT_SECRET`
+`ARM_TENANT_ID`
+`ARM_SUBSCRIPTION_ID`
 
 ### When done:
 #### Clean Up Docker Environment
