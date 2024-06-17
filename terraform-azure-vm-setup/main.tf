@@ -1,12 +1,12 @@
 terraform {
   required_providers {
     azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+      source = "hashicorp/azurerm"
+      version = "> 3.0"
     }
     vault = {
-      source  = "hashicorp/vault"
-      version = "~> 2.0"
+      source = "hashicorp/vault"
+      version = "> 2.0"
     }
   }
 }
@@ -20,44 +20,37 @@ provider "vault" {
   token   = var.vault_token
 }
 
-resource "azurerm_resource_group" "rg" {
+resource "azurerm_resource_group" "main" {
   name     = var.resource_group_name
   location = var.location
 }
 
 resource "azurerm_storage_account" "storage" {
   name                     = var.storage_account_name
-  resource_group_name      = azurerm_resource_group.rg.name
-  location                 = azurerm_resource_group.rg.location
+  resource_group_name      = azurerm_resource_group.main.name
+  location                 = var.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
+  depends_on               = [azurerm_resource_group.main]
 }
 
 resource "azurerm_storage_container" "container" {
   name                  = var.storage_container_name
   storage_account_name  = azurerm_storage_account.storage.name
   container_access_type = "private"
-}
-
-resource "azurerm_storage_account" "datalake" {
-  name                     = var.datalake_store_name
-  resource_group_name      = azurerm_resource_group.rg.name
-  location                 = azurerm_resource_group.rg.location
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
-  is_hns_enabled           = true
+  depends_on            = [azurerm_storage_account.storage]
 }
 
 resource "azurerm_virtual_network" "vnet" {
-  name                = "myVnet"
+  name                = var.virtual_network_name
   address_space       = ["10.0.0.0/16"]
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  location            = var.location
+  resource_group_name = var.resource_group_name
 }
 
 resource "azurerm_subnet" "subnet" {
-  name                 = "mySubnet"
-  resource_group_name  = azurerm_resource_group.rg.name
+  name                 = var.subnet_name
+  resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = ["10.0.1.0/24"]
 }
@@ -71,23 +64,23 @@ locals {
 }
 
 data "azurerm_public_ip" "existing" {
-  count               = local.public_ip_exists ? 1 : 0
-  name                = var.public_ip_name
-  resource_group_name = var.resource_group_name
+  count                = local.public_ip_exists ? 1 : 0
+  name                 = var.public_ip_name
+  resource_group_name  = var.resource_group_name
 }
 
 resource "azurerm_public_ip" "public_ip" {
   count               = local.public_ip_exists ? 0 : 1
   name                = var.public_ip_name
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  location            = var.location
+  resource_group_name = var.resource_group_name
   allocation_method   = "Static"
 }
 
 resource "azurerm_network_interface" "nic" {
-  name                = "myNic"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  name                 = var.network_interface_name
+  location             = var.location
+  resource_group_name  = var.resource_group_name
 
   ip_configuration {
     name                          = "myNicConfiguration"
@@ -98,9 +91,9 @@ resource "azurerm_network_interface" "nic" {
 }
 
 resource "azurerm_network_security_group" "nsg" {
-  name                = "myNsg"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  name                = var.network_security_group_name
+  location            = var.location
+  resource_group_name = var.resource_group_name
 
   security_rule {
     name                       = "SSH"
@@ -121,48 +114,27 @@ resource "azurerm_network_interface_security_group_association" "nsg_association
 }
 
 resource "azurerm_managed_disk" "my_disk" {
-  name                 = "myOsDisk"
-  location             = azurerm_resource_group.rg.location
-  resource_group_name  = azurerm_resource_group.rg.name
+  name                 = var.disk_name
+  location             = var.location
+  resource_group_name  = var.resource_group_name
   storage_account_type = "Standard_LRS"
-  create_option        = "Empty" # This will be changed dynamically
+  create_option        = "Empty"
   disk_size_gb         = 100
 }
 
 resource "azurerm_virtual_machine" "vm" {
-  name                  = "myVM"
-  location              = azurerm_resource_group.rg.location
-  resource_group_name   = azurerm_resource_group.rg.name
+  name                  = var.virtual_machine_name
+  location              = var.location
+  resource_group_name   = var.resource_group_name
   network_interface_ids = [azurerm_network_interface.nic.id]
-  vm_size               = "Standard_D2_v2"
+  vm_size               = "Standard_E2_v5"
 
   storage_os_disk {
-    name              = azurerm_managed_disk.my_disk.name
+    name              = var.disk_name
     caching           = "ReadWrite"
-    create_option     = "FromImage" # Set create_option as needed
-    managed_disk_type = "Standard_LRS"
-    disk_size_gb      = 100
-  }
-
-  storage_image_reference {
-    publisher = "Canonical"
-    offer     = "UbuntuServer"
-    sku       = "18.04-LTS"
-    version   = "latest"
-  }
-
-  os_profile {
-    computer_name  = "hostname"
-    admin_username = var.admin_username
-    admin_password = var.admin_password
-  }
-
-  os_profile_linux_config {
-    disable_password_authentication = false
-    ssh_keys {
-      path     = "/home/${var.admin_username}/.ssh/authorized_keys"
-      key_data = file("${path.module}/id_rsa.pub")
-    }
+    create_option     = "Attach"
+    managed_disk_id   = azurerm_managed_disk.my_disk.id
+    os_type           = "Linux"
   }
 
   tags = {
