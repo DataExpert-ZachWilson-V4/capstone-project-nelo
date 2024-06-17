@@ -46,6 +46,12 @@ fi
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
+# Install jq if not installed
+if ! command -v jq &> /dev/null; then
+  sudo apt-get update
+  sudo apt-get install -y jq
+fi
+
 # Load environment variables from .env file
 if [ -f .env ]; then
   echo "Loading environment variables from .env file..."
@@ -266,7 +272,7 @@ echo "Applying Terraform plan for VM setup..."
 log_and_time "terraform apply -parallelism=10 -auto-approve tfplan"
 
 # Extract the storage account key from Terraform output
-STORAGE_ACCOUNT_KEY=$(terraform output -json storage_account_key | jq -r '.value')
+STORAGE_ACCOUNT_KEY=$(terraform output -json storage_account_key | jq -r '.storage_account_key.value')
 
 # Check if the .env file exists
 if [ ! -f ../.env ]; then
