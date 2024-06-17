@@ -158,9 +158,7 @@ A cross-validation technique used when dealing with time series data. It ensures
 
 $\{(X_t, Y_t)\}_{t=1}^{T}$ is the time series data, where $X_t$ represents the features and $Y_t$ represents the target variable at time $t$. The splits are defined as follows:
 
-- **Fold 1**: Training set is $(X_t, Y_t)_{t=1}^{\frac{T}{3}}$ and test set is $(X_t, Y_t)_{t=\frac{T}{3}+1}^{\frac{2T}{3}}$
-- **Fold 2**: Training set is $(X_t, Y_t)_{t=1}^{\frac{2T}{3}}$ and test set is $(X_t, Y_t)_{t=\frac{2T}{3}+1}^{T}$
-- **Fold $k$** (general case for $k$ folds): Training set is $(X_t, Y_t)_{t=1}^{\frac{kT}{k+1}}$ and test set is $(X_t, Y_t)_{t=\frac{kT}{k+1}+1}^{\frac{(k+1)T}{k+1}}$ for $k < K$, or $(X_t, Y_t)_{t=\frac{kT}{k+1}+1}^{T}$ if $k = K$.
+![FOLDS](/FOLDS.png)
 
 where $T_i$ are the split points. For each fold, the model is trained on the training set and evaluated on the test set. The performance metric, such as Mean Squared Error (MSE), is averaged across all folds to give the final evaluation metric.
 
