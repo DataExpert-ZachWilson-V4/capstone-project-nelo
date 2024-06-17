@@ -3,7 +3,7 @@
 
 # MLB Game Stats Pipeline/Predictor/Chat-Bot
 
-![MLB Diagram](/MLB_Diagram.png)
+![MLB Diagram](/MLB_Diagram_Updated.png)
 
 I used Ubuntu with Windows Subsystem for Linux (WSL 2), Docker Desktop and VS Code to complete this project.
 
@@ -48,7 +48,7 @@ This project involves fetching historical & current MLB game stats from MLB.com 
 
 #### Kafka
 
-Kafka Producers are used to send MLB data (team/player info, stats/scores) in JSON format to  Kafka topics. The producers determine the game range to be fetched using start_game and end_game arguments. This range is split among multiple threads to enable parallel data retrieval. Each script targets specific data types (like box scores or player info) and corresponds to a Kafka topic. For every game in the specified range, the producer constructs the API endpoint URL, sends an HTTP GET request, and, if necessary, retries up to five times using exponential backoff. To manage concurrency, I used ThreadPoolExecutor, which runs multiple scripts simultaneously. Semaphore limits the number of concurrent threads to avoid system overload. Tasks are batched and submitted in intervals to manage workload and reduce resource contention.
+Kafka Producers are used to send MLB data (team/player info, stats/scores) in JSON format to Kafka topics. I used Pydantic models to validate and parse the data before sending it to Kafka. The producers determine the game range to be fetched using start_game and end_game arguments. This range is split among multiple threads to enable parallel data retrieval. Each script targets specific data types (like box scores or player info) and corresponds to a Kafka topic. For every game in the specified range, the producer constructs the API endpoint URL, sends an HTTP GET request, and, if necessary, retries up to five times using exponential backoff. To manage concurrency, I used ThreadPoolExecutor, which runs multiple scripts simultaneously. Semaphore limits the number of concurrent threads to avoid system overload. Tasks are batched and submitted in intervals to manage workload and reduce resource contention.
 
 #### Spark Structured Streaming
 
