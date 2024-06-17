@@ -1,5 +1,43 @@
 #!/bin/bash
 
+## Instructions to obtain Azure credentials:
+
+# 1. Azure Subscription ID:
+#    - Navigate to the Azure portal (https://portal.azure.com).
+#    - In the left sidebar, click on "Subscriptions".
+#    - Select the subscription you want to use.
+#    - The Subscription ID will be displayed at the top of the subscription overview page.
+
+# 2. Tenant ID:
+#    - In the Azure portal, go to "Azure Active Directory".
+#    - In the overview section, you will find the Tenant ID.
+
+# 3. Client ID and Client Secret (Service Principal):
+#    - Go to "Azure Active Directory" in the Azure portal.
+#    - In the left sidebar, click on "App registrations".
+#    - Click on "New registration".
+#        - Name: Give your application a name.
+#        - Supported account types: Select "Accounts in this organizational directory only".
+#        - Redirect URI: You can leave this blank for now.
+#    - Click "Register".
+#    - Once registered, you will be redirected to the application's overview page where you will see the Application (client) ID. This is your ARM_CLIENT_ID.
+#    - Next, click on "Certificates & secrets" in the left sidebar.
+#    - Under "Client secrets", click "New client secret".
+#    - Add a description and select the expiry period, then click "Add".
+#    - The new client secret will be displayed. Copy the Value immediately; this is your ARM_CLIENT_SECRET. You won't be able to see it again once you navigate away.
+
+# 4. Admin Username and Password:
+#    - These are the credentials you want to set for the admin user on your Azure VM. You can choose any username and password you prefer. Make sure to store them securely.
+
+# save these variables in .env file
+
+#    - ARM_CLIENT_ID
+#    - ARM_CLIENT_SECRET
+#    - ARM_SUBSCRIPTION_ID
+#    - ARM_TENANT_ID
+#    - ADMIN_USERNAME
+#    - ADMIN_PASSWORD
+
 # Self-setting execute permissions
 if [ ! -x "$0" ]; then
   chmod +x "$0"
