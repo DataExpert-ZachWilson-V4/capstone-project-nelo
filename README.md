@@ -26,7 +26,11 @@ This automates the setup of Azure VM using Terraform and GitHub Actions. Install
 
 It waits for the VM to be in a running state, connects to it via SSH, installs Docker, Docker Compose, VS Code Server, and GitHub CLI, copies project files, and starts services with Docker Compose.
 
-#### Keep in mind to save these in .env file
+Run `ssh -i path/to/id_rsa azureuser@<PUBLIC_IP>` on your local machine to access VM 
+
+**(Replace <PUBLIC_IP> with the public ip for the VM)**
+
+#### Keep in mind to save these in .env file (instructions on where to find these are in .env file)
 
 `RESOURCE_GROUP_NAME`
 `STORAGE_ACCOUNT_NAME`
