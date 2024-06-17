@@ -89,6 +89,16 @@
       "Username": "${AZURE_POSTGRES_USERNAME}",
       "Password": "${AZURE_POSTGRES_PASSWORD}",
       "SSLMode": "prefer"
+    },
+    "10": {
+      "Name": "Spark Postgres",
+      "Group": "Servers",
+      "Host": "${AZURE_POSTGRES_HOST}",
+      "Port": 5432,
+      "MaintenanceDB": "${AZURE_SPARK_DB}",
+      "Username": "${AZURE_POSTGRES_USERNAME}",
+      "Password": "${AZURE_POSTGRES_PASSWORD}",
+      "SSLMode": "prefer"
     }
   }
 }

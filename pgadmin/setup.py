@@ -23,7 +23,8 @@ env_vars = {
     "AZURE_ZOOKEEPER_DB": os.getenv("AZURE_ZOOKEEPER_DB"),
     "AZURE_KAFKA_DB": os.getenv("AZURE_KAFKA_DB"),
     "AZURE_TRINO_DB": os.getenv("AZURE_TRINO_DB"),
-    "AZURE_QDRANT_DB": os.getenv("AZURE_QDRANT_DB")
+    "AZURE_QDRANT_DB": os.getenv("AZURE_QDRANT_DB"),
+    "AZURE_SPARK_DB": os.getenv("AZURE_SPARK_DB")
 }
 
 with open('/pgadmin/servers.json') as f:

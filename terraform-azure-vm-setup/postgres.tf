@@ -16,6 +16,8 @@ resource "azurerm_postgresql_server" "postgres_server" {
     enabled              = true
     retention_days       = 7
   }
+
+  depends_on = [azurerm_resource_group.main]
 }
 
 resource "azurerm_postgresql_database" "airflow_db" {
@@ -24,6 +26,7 @@ resource "azurerm_postgresql_database" "airflow_db" {
   server_name          = azurerm_postgresql_server.postgres_server.name
   charset              = "UTF8"
   collation            = "English_United States.1252"
+  depends_on           = [azurerm_postgresql_server.postgres_server]
 }
 
 resource "azurerm_postgresql_database" "superset_db" {
@@ -32,6 +35,7 @@ resource "azurerm_postgresql_database" "superset_db" {
   server_name          = azurerm_postgresql_server.postgres_server.name
   charset              = "UTF8"
   collation            = "English_United States.1252"
+  depends_on           = [azurerm_postgresql_server.postgres_server]
 }
 
 resource "azurerm_postgresql_database" "hive_db" {
@@ -40,6 +44,7 @@ resource "azurerm_postgresql_database" "hive_db" {
   server_name          = azurerm_postgresql_server.postgres_server.name
   charset              = "UTF8"
   collation            = "English_United States.1252"
+  depends_on           = [azurerm_postgresql_server.postgres_server]
 }
 
 resource "azurerm_postgresql_database" "mlflow_db" {
@@ -48,6 +53,7 @@ resource "azurerm_postgresql_database" "mlflow_db" {
   server_name          = azurerm_postgresql_server.postgres_server.name
   charset              = "UTF8"
   collation            = "English_United States.1252"
+  depends_on           = [azurerm_postgresql_server.postgres_server]
 }
 
 resource "azurerm_postgresql_database" "haystack_db" {
@@ -56,6 +62,7 @@ resource "azurerm_postgresql_database" "haystack_db" {
   server_name          = azurerm_postgresql_server.postgres_server.name
   charset              = "UTF8"
   collation            = "English_United States.1252"
+  depends_on           = [azurerm_postgresql_server.postgres_server]
 }
 
 resource "azurerm_postgresql_database" "zookeeper_db" {
@@ -64,6 +71,7 @@ resource "azurerm_postgresql_database" "zookeeper_db" {
   server_name          = azurerm_postgresql_server.postgres_server.name
   charset              = "UTF8"
   collation            = "English_United States.1252"
+  depends_on           = [azurerm_postgresql_server.postgres_server]
 }
 
 resource "azurerm_postgresql_database" "kafka_db" {
@@ -72,14 +80,7 @@ resource "azurerm_postgresql_database" "kafka_db" {
   server_name          = azurerm_postgresql_server.postgres_server.name
   charset              = "UTF8"
   collation            = "English_United States.1252"
-}
-
-resource "azurerm_postgresql_database" "pgadmin_db" {
-  name                 = var.pgadmin_db
-  resource_group_name  = azurerm_resource_group.main.name
-  server_name          = azurerm_postgresql_server.postgres_server.name
-  charset              = "UTF8"
-  collation            = "English_United States.1252"
+  depends_on           = [azurerm_postgresql_server.postgres_server]
 }
 
 resource "azurerm_postgresql_database" "trino_db" {
@@ -88,6 +89,7 @@ resource "azurerm_postgresql_database" "trino_db" {
   server_name          = azurerm_postgresql_server.postgres_server.name
   charset              = "UTF8"
   collation            = "English_United States.1252"
+  depends_on           = [azurerm_postgresql_server.postgres_server]
 }
 
 resource "azurerm_postgresql_database" "qdrant_db" {
@@ -96,6 +98,7 @@ resource "azurerm_postgresql_database" "qdrant_db" {
   server_name          = azurerm_postgresql_server.postgres_server.name
   charset              = "UTF8"
   collation            = "English_United States.1252"
+  depends_on           = [azurerm_postgresql_server.postgres_server]
 }
 
 resource "azurerm_postgresql_database" "spark_db" {
@@ -104,8 +107,5 @@ resource "azurerm_postgresql_database" "spark_db" {
   server_name          = azurerm_postgresql_server.postgres_server.name
   charset              = "UTF8"
   collation            = "English_United States.1252"
-}
-
-data "vault_generic_secret" "postgres" {
-  path = "secret/data/postgres"
+  depends_on           = [azurerm_postgresql_server.postgres_server]
 }

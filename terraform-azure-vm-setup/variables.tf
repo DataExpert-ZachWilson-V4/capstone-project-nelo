@@ -1,12 +1,3 @@
-variable "vault_token" {
-  description = "Vault token for authentication"
-}
-
-variable "vault_addr" {
-  description = "Vault address for authentication"
-  default     = "http://127.0.0.1:8200"
-}
-
 variable "location" {
   description = "The location where resources will be created"
   default     = "East US"
@@ -122,11 +113,6 @@ variable "zookeeper_db" {
 variable "kafka_db" {
   description = "Name of the Kafka database"
   default     = "kafka"
-}
-
-variable "pgadmin_db" {
-  description = "Name of the pgAdmin database"
-  default     = "pgadmin"
 }
 
 variable "trino_db" {

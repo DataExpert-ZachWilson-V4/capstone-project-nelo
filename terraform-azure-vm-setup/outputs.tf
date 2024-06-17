@@ -36,7 +36,7 @@ output "network_security_group_name" {
 }
 
 output "managed_disk_name" {
-  value = azurerm_managed_disk.my_disk.name
+  value = var.disk_name
 }
 
 output "virtual_machine_name" {
@@ -73,10 +73,6 @@ output "zookeeper_db_name" {
 
 output "kafka_db_name" {
   value = azurerm_postgresql_database.kafka_db.name
-}
-
-output "pgadmin_db_name" {
-  value = azurerm_postgresql_database.pgadmin_db.name
 }
 
 output "trino_db_name" {
