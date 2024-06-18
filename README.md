@@ -32,7 +32,9 @@ Run `ssh -i path/to/id_rsa azureuser@<PUBLIC_IP>` on your local machine to acces
 
 **(Replace <PUBLIC_IP> with the public ip for the VM)**
 
-And Run docker-compose up -d
+Then Run `cd /home/azureuser/projects/capstone-project-nelo-mlb-stats`
+
+And Run `docker-compose up -d` to start all services.
 
 #### Keep in mind to save these in .env file (instructions on where to find these are in .env file)
 
