@@ -16,36 +16,6 @@ resource "azurerm_resource_group" "main" {
   location = var.location
 }
 
-resource "azurerm_storage_account" "storage" {
-  name                     = var.storage_account_name
-  resource_group_name      = azurerm_resource_group.main.name
-  location                 = var.location
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
-  depends_on               = [azurerm_resource_group.main]
-}
-
-resource "null_resource" "wait_for_storage_account" {
-  depends_on = [azurerm_storage_account.storage]
-
-  provisioner "local-exec" {
-    command = <<EOT
-while [ "$(az storage account show --name ${azurerm_storage_account.storage.name} --resource-group ${azurerm_resource_group.main.name} --query "provisioningState" --output tsv)" != "Succeeded" ]; do
-  echo "Waiting for storage account to be provisioned..."
-  sleep 10
-done
-EOT
-    interpreter = ["/bin/bash", "-c"]
-  }
-}
-
-resource "azurerm_storage_container" "container" {
-  name                  = var.storage_container_name
-  storage_account_name  = azurerm_storage_account.storage.name
-  container_access_type = "private"
-  depends_on            = [null_resource.wait_for_storage_account]
-}
-
 resource "azurerm_virtual_network" "vnet" {
   name                = var.virtual_network_name
   address_space       = ["10.0.0.0/16"]
@@ -418,7 +388,7 @@ resource "azurerm_network_security_group" "nsg" {
     source_address_prefix      = "*"
     destination_address_prefix = "*"
   }
-  
+
   security_rule {
     name                       = "Redis"
     priority                   = 1027
@@ -467,7 +437,7 @@ resource "azurerm_virtual_machine" "vm" {
   location              = var.location
   resource_group_name   = var.resource_group_name
   network_interface_ids = [azurerm_network_interface.nic.id]
-  vm_size               = "Standard_E2_v5"
+  vm_size               = "Standard_E4_v4"
   depends_on            = [azurerm_network_interface.nic]
 
   os_profile {

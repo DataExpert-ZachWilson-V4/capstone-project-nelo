@@ -1,6 +1,7 @@
 variable "location" {
-  description = "The location where resources will be created"
-  default     = "East US"
+  description = "The Azure region"
+  type        = string
+  default     = "eastus"
 }
 
 variable "resource_group_name" {
@@ -20,29 +21,7 @@ variable "admin_username" {
 
 variable "admin_password" {
   description = "Admin password for the VM"
-  default     = "P@ssw0rd1234!"
-}
-
-variable "postgres_admin_username" {
-  description = "PostgreSQL admin username"
-  default     = "postgres_admin"
-}
-
-variable "postgres_admin_password" {
-  description = "PostgreSQL admin password"
-  default     = "P@ssw0rd1234!"
-}
-
-variable "storage_account_name" {
-  description = "The name of the storage account."
-  type        = string
-  default     = "nelomlb"
-}
-
-variable "storage_container_name" {
-  description = "The name of the storage container."
-  type        = string
-  default     = "nelomlb"
+  default     = "Password1234!"
 }
 
 variable "virtual_network_name" {
@@ -73,11 +52,6 @@ variable "virtual_machine_name" {
 variable "disk_name" {
   description = "The name of the managed disk"
   default     = "neloOsDisk"
-}
-
-variable "postgres_server_name" {
-  description = "PostgreSQL server name"
-  default     = "nelomlb-postgres-server"
 }
 
 variable "airflow_db" {
