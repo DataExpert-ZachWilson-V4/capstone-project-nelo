@@ -14,18 +14,6 @@ if [ -f .env ]; then
   export $(grep -v '^#' .env | xargs)
 fi
 
-# Ensure RESOURCE_GROUP_NAME is set
-if [ -z "$RESOURCE_GROUP_NAME" ]; then
-    echo "RESOURCE_GROUP_NAME is not set. Please set it in the .env file."
-    exit 1
-fi
-
-# Ensure STORAGE_ACCOUNT_NAME is set
-if [ -z "$STORAGE_ACCOUNT_NAME" ]; then
-    echo "STORAGE_ACCOUNT_NAME is not set. Please set it in the .env file."
-    exit 1
-fi
-
 # Ensure required environment variables are set
 required_vars=(RESOURCE_GROUP_NAME STORAGE_ACCOUNT_NAME ARM_CLIENT_ID ARM_CLIENT_SECRET ARM_TENANT_ID ARM_SUBSCRIPTION_ID)
 for var in "${required_vars[@]}"; do
@@ -178,7 +166,6 @@ CONTAINER_ID="/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP
 
 # Import existing resource if it exists
 log_and_time "import_resource azurerm_resource_group.main $RESOURCE_GROUP_ID"
-log_and_time "import_resource azurerm_storage_account.storage $STORAGE_ACCOUNT_ID"
 
 # Apply Terraform plan for VM setup
 echo "Creating Terraform plan for VM setup..."
