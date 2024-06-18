@@ -18,7 +18,7 @@ I used Ubuntu with Windows Subsystem for Linux (WSL 2), Docker Desktop and VS Co
 
 `cd capstone-project-nelo-mlb-stats`
 
-##### Before setting up AZURE VM, in portal, create `Resource Group` and `Storage Account` (using the variables in .env file)
+##### Before setting up AZURE VM, in portal, create `Resource Group`, `Storage Account` (with Hierarchical namespace enabled) and `Container` using the variables in .env file.
 
 ### Azure VM Setup
 
