@@ -469,6 +469,22 @@ resource "azurerm_virtual_machine" "vm" {
   }
 }
 
+resource "azurerm_managed_disk" "data_disk" {
+  name                 = "${var.virtual_machine_name}-data-disk"
+  location             = var.location
+  resource_group_name  = var.resource_group_name
+  storage_account_type = "Standard_LRS"
+  disk_size_gb         = 128  
+  create_option        = "Empty"  
+}
+
+resource "azurerm_virtual_machine_data_disk_attachment" "data_disk_attachment" {
+  managed_disk_id    = azurerm_managed_disk.data_disk.id
+  virtual_machine_id = azurerm_virtual_machine.vm.id
+  lun                = 0
+  caching            = "ReadWrite"
+}
+
 resource "tls_private_key" "example" {
   algorithm = "RSA"
   rsa_bits  = 4096
