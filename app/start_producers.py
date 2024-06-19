@@ -75,9 +75,9 @@ def main():
 
     start_game_number = args.start_game_number
     end_game_number = args.end_game_number
-    total_pullers = 40  # Increase the number of pullers
-    batch_size = 8  # Increase the batch size
-    max_concurrent_pullers = 8  # Increase the concurrent pullers
+    total_pullers = 40  
+    batch_size = 8  
+    max_concurrent_pullers = 8  
     game_range = end_game_number - start_game_number + 1
     games_per_puller = game_range // total_pullers
 
@@ -106,7 +106,7 @@ def main():
     ]
 
     with ThreadPoolExecutor(
-        max_workers=40,  # Increase the number of workers
+        max_workers=40,  
         thread_name_prefix='puller-thread-',
     ) as executor:
         futures = []
