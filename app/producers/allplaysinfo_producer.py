@@ -143,7 +143,7 @@ def send_data_to_kafka(producer, topic, records):
                 time.sleep(5)
 
 def stream_allplays_data(start_game_number, end_game_number, topic):
-    max_workers = 40  # Increased max_workers to 40
+    max_workers = 40  
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_game = {executor.submit(fetch_game_data, game_number): game_number for game_number in range(start_game_number, end_game_number + 1)}
 
