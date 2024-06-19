@@ -154,7 +154,7 @@ class CustomThreadFactory:
 
 def stream_teams_boxscore_data(start_game_number, end_game_number, topic):
     producer = create_producer()
-    queue = Queue(40)  # Increased queue size to 40
+    queue = Queue(40) 
     thread_factory = CustomThreadFactory(name_prefix="kafka-producer-thread")
 
     def custom_rejected_execution_handler(runnable, executor):
@@ -165,7 +165,7 @@ def stream_teams_boxscore_data(start_game_number, end_game_number, topic):
             logger.error(f"Queue is full, task {runnable} could not be added.")
 
     with ThreadPoolExecutor(
-        max_workers=40,  # Increased max_workers to 40
+        max_workers=40, 
         thread_name_prefix='kafka-producer-',
     ) as executor:
         future_to_game = {executor.submit(fetch_game_data, game_number): game_number for game_number in range(start_game_number, end_game_number + 1)}
