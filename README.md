@@ -1,5 +1,7 @@
 ## STILL IN PROGRESS
 ## MORE UPDATES TO BE ADDED DAILY.
+## NOT SURE IF EVERYTHING WILL BE DONE BY DEADLINE 
+## BUT WILL NOT STOP UNTIL COMPLETE
 
 # MLB Game Stats Pipeline/Predictor/Chat-Bot
 
@@ -24,7 +26,7 @@ I used Ubuntu with Windows Subsystem for Linux (WSL 2), Docker Desktop and VS Co
 
 Run `./setup_vm.sh`
 
-This automates the setup of Azure VM using Terraform. Installs tools (Terraform, Azure CLI, sshpass), logs into Azure, verifies subscription access, generates SSH keys, applies Terraform changes to create or update resources, and retrieves the VM's public IP address. 
+This automates the setup of Azure VM using Terraform. Installs tools (Terraform, Azure CLI, sshpass), logs into Azure, verifies subscription access, generates SSH keys, applies Terraform changes to create the VM, and retrieves the VM's public IP address. 
 
 It waits for the VM to be in a running state, connects to it via SSH, installs Docker, Docker Compose, VS Code Server, and GitHub CLI, and copies project files.
 
@@ -51,11 +53,11 @@ This project involves fetching historical & current MLB game stats from MLB.com 
 
 ## Data Retrieval/Storage Process
 
-#### Kafka
+### Kafka
 
 Kafka Producers are used to send MLB data (team/player info, stats/scores) in JSON format to Kafka topics. I used Pydantic models to validate and parse the data before sending it to Kafka. The producers determine the game range to be fetched using start_game and end_game arguments. This range is split among multiple threads to enable parallel data retrieval. Each script targets specific data types (like box scores or player info) and corresponds to a Kafka topic. For every game in the specified range, the producer constructs the API endpoint URL, sends an HTTP GET request, and, if necessary, retries up to five times using exponential backoff. To manage concurrency, I used ThreadPoolExecutor, which runs multiple scripts simultaneously. Semaphore limits the number of concurrent threads to avoid system overload. Tasks are batched and submitted in intervals to manage workload and reduce resource contention.
 
-#### Spark Structured Streaming
+### Spark Structured Streaming
 
 Spark streams are used to process MLB game data from Kafka topics, dynamically process micro-batches to transform and perform aggregations, and store data in Iceberg tables using Azure Data Lake Storage. 
 
@@ -63,11 +65,516 @@ SCD Type 2 method is included to track changes in dimension data over time by ma
 
 Cumulative and aggregate tables are created to track season totals and averages. `Cumulative Team & Player Season Totals` tables track the cumulative stats of teams & players for current season. `Aggregate Team & Player Season Totals` provide aggregated totals for each team & player per season. `Cumulative Team & Player Season Averages` provide running averages for team & player stats. `Aggregate Team & Players Season Averages` provide the average statistics for teams & players on a seasonal basis.
 
-#### Data Quality with dbt
+### Tables
+
+#### `dim_team_boxscores`
+Stats for each team in a game.
+
+| Column                        | Type        |
+| ----------------------------- | ----------- |
+| game_id                       | STRING      |
+| game_date                     | DATE        |
+| team_id                       | INT         |
+| team_name                     | STRING      |
+| flyOuts                       | INT         |
+| groundOuts                    | INT         |
+| airOuts                       | INT         |
+| runs                          | INT         |
+| doubles                       | INT         |
+| triples                       | INT         |
+| homeRuns                      | INT         |
+| strikeOuts                    | INT         |
+| baseOnBalls                   | INT         |
+| intentionalWalks              | INT         |
+| hits                          | INT         |
+| hitByPitch                    | INT         |
+| avg                           | DOUBLE      |
+| atBats                        | INT         |
+| obp                           | DOUBLE      |
+| slg                           | DOUBLE      |
+| ops                           | DOUBLE      |
+| caughtStealing                | INT         |
+| stolenBases                   | INT         |
+| stolenBasePercentage          | DOUBLE      |
+| groundIntoDoublePlay          | INT         |
+| groundIntoTriplePlay          | INT         |
+| plateAppearances              | INT         |
+| totalBases                    | INT         |
+| rbi                           | INT         |
+| leftOnBase                    | INT         |
+| sacBunts                      | INT         |
+| sacFlies                      | INT         |
+| catchersInterference          | INT         |
+| pickoffs                      | INT         |
+| atBatsPerHomeRun              | DOUBLE      |
+| popOuts                       | INT         |
+| lineOuts                      | INT         |
+| month                         | INT         |
+| day                           | INT         |
+| team_type                     | STRING      |
+
+#### `dim_player_boxscores`
+Stats for each player in a game.
+
+
+| Column                        | Type        |
+| ----------------------------- | ----------- |
+| game_id                       | STRING      |
+| game_date                     | DATE        |
+| player_id                     | INT         |
+| player_name                   | STRING      |
+| team_id                       | INT         |
+| team_name                     | STRING      |
+| batting_order                 | INT         |
+| batting_summary               | STRING      |
+| batting_gamesPlayed           | INT         |
+| batting_flyOuts               | INT         |
+| batting_groundOuts            | INT         |
+| batting_airOuts               | INT         |
+| batting_runs                  | INT         |
+| batting_doubles               | INT         |
+| batting_triples               | INT         |
+| batting_homeRuns              | INT         |
+| batting_strikeOuts            | INT         |
+| batting_baseOnBalls           | INT         |
+| batting_intentionalWalks      | INT         |
+| batting_hits                  | INT         |
+| batting_hitByPitch            | INT         |
+| batting_avg                   | DOUBLE      |
+| batting_atBats                | INT         |
+| batting_obp                   | DOUBLE      |
+| batting_slg                   | DOUBLE      |
+| batting_ops                   | DOUBLE      |
+| batting_caughtStealing        | INT         |
+| batting_stolenBases           | INT         |
+| batting_stolenBasePercentage  | DOUBLE      |
+| batting_groundIntoDoublePlay  | INT         |
+| batting_groundIntoTriplePlay  | INT         |
+| batting_plateAppearances      | INT         |
+| batting_totalBases            | INT         |
+| batting_rbi                   | INT         |
+| batting_leftOnBase            | INT         |
+| batting_sacBunts              | INT         |
+| batting_sacFlies              | INT         |
+| batting_catchersInterference  | INT         |
+| batting_pickoffs              | INT         |
+| batting_atBatsPerHomeRun      | DOUBLE      |
+| batting_popOuts               | INT         |
+| batting_lineOuts              | INT         |
+| fielding_gamesStarted         | INT         |
+| fielding_caughtStealing       | INT         |
+| fielding_stolenBases          | INT         |
+| fielding_stolenBasePercentage | DOUBLE      |
+| fielding_assists              | INT         |
+| fielding_putOuts              | INT         |
+| fielding_errors               | INT         |
+| fielding_chances              | INT         |
+| fielding_fielding             | DOUBLE      |
+| fielding_passedBall           | INT         |
+| fielding_pickoffs             | INT         |
+| month                         | INT         |
+| day                           | INT         |
+| player_type                   | STRING      |
+
+#### `aggregated_team_season_boxscore_totals`
+
+| Column                        | Type        |
+| ----------------------------- | ----------- |
+| season                        | INT         |
+| team_id                       | INT         |
+| total_flyOuts                 | INT         |
+| total_groundOuts              | INT         |
+| total_airOuts                 | INT         |
+| total_runs                    | INT         |
+| total_doubles                 | INT         |
+| total_triples                 | INT         |
+| total_homeRuns                | INT         |
+| total_strikeOuts              | INT         |
+| total_baseOnBalls             | INT         |
+| total_intentionalWalks        | INT         |
+| total_hits                    | INT         |
+| total_hitByPitch              | INT         |
+| total_avg                     | DOUBLE      |
+| total_atBats                  | INT         |
+| total_obp                     | DOUBLE      |
+| total_slg                     | DOUBLE      |
+| total_ops                     | DOUBLE      |
+| total_caughtStealing          | INT         |
+| total_stolenBases             | INT         |
+| total_stolenBasePercentage    | DOUBLE      |
+| total_groundIntoDoublePlay    | INT         |
+| total_groundIntoTriplePlay    | INT         |
+| total_plateAppearances        | INT         |
+| total_totalBases              | INT         |
+| total_rbi                     | INT         |
+| total_leftOnBase              | INT         |
+| total_sacBunts                | INT         |
+| total_sacFlies                | INT         |
+| total_catchersInterference    | INT         |
+| total_pickoffs                | INT         |
+| total_atBatsPerHomeRun        | DOUBLE      |
+| total_popOuts                 | INT         |
+| total_lineOuts                | INT         |
+| total_gamesPlayed             | INT         |
+| month                         | INT         |
+| team_type                     | STRING      |
+
+#### `aggregated_player_season_boxscore_totals`
+
+| Column                        | Type        |
+| ----------------------------- | ----------- |
+| season                        | INT         |
+| team_id                       | INT         |
+| player_id                     | INT         |
+| total_batting_gamesPlayed     | INT         |
+| total_batting_flyOuts         | INT         |
+| total_batting_groundOuts      | INT         |
+| total_batting_airOuts         | INT         |
+| total_batting_runs            | INT         |
+| total_batting_doubles         | INT         |
+| total_batting_triples         | INT         |
+| total_batting_homeRuns        | INT         |
+| total_batting_strikeOuts      | INT         |
+| total_batting_baseOnBalls     | INT         |
+| total_batting_intentionalWalks| INT         |
+| total_batting_hits            | INT         |
+| total_batting_hitByPitch      | INT         |
+| total_batting_avg             | DOUBLE      |
+| total_batting_atBats          | INT         |
+| total_batting_obp             | DOUBLE      |
+| total_batting_slg             | DOUBLE      |
+| total_batting_ops             | DOUBLE      |
+| total_batting_caughtStealing  | INT         |
+| total_batting_stolenBases     | INT         |
+| total_batting_stolenBasePercentage | DOUBLE  |
+| total_batting_groundIntoDoublePlay | INT     |
+| total_batting_groundIntoTriplePlay | INT     |
+| total_batting_plateAppearances| INT         |
+| total_batting_totalBases      | INT         |
+| total_batting_rbi             | INT         |
+| total_batting_leftOnBase      | INT         |
+| total_batting_sacBunts        | INT         |
+| total_batting_sacFlies        | INT         |
+| total_batting_catchersInterference | INT     |
+| total_batting_pickoffs        | INT         |
+| total_batting_atBatsPerHomeRun| DOUBLE      |
+| total_batting_popOuts         | INT         |
+| total_batting_lineOuts        | INT         |
+| total_fielding_gamesStarted   | INT         |
+| total_fielding_caughtStealing | INT         |
+| total_fielding_stolenBases    | INT         |
+| total_fielding_stolenBasePercentage | DOUBLE |
+| total_fielding_assists        | INT         |
+| total_fielding_putOuts        | INT         |
+| total_fielding_errors         | INT         |
+| total_fielding_chances        | INT         |
+| total_fielding_fielding       | DOUBLE      |
+| total_fielding_passedBall     | INT         |
+| total_fielding_pickoffs       | INT         |
+| month                         | INT         |
+| player_type                   | STRING      |
+
+#### `aggregated_team_season_boxscore_averages`
+
+| Column                        | Type        |
+| ----------------------------- | ----------- |
+| season                        | INT         |
+| team_id                       | INT         |
+| avg_flyOuts                   | DOUBLE      |
+| avg_groundOuts                | DOUBLE      |
+| avg_airOuts                   | DOUBLE      |
+| avg_runs                      | DOUBLE      |
+| avg_doubles                   | DOUBLE      |
+| avg_triples                   | DOUBLE      |
+| avg_homeRuns                  | DOUBLE      |
+| avg_strikeOuts                | DOUBLE      |
+| avg_baseOnBalls               | DOUBLE      |
+| avg_intentionalWalks          | DOUBLE      |
+| avg_hits                      | DOUBLE      |
+| avg_hitByPitch                | DOUBLE      |
+| avg_avg                       | DOUBLE      |
+| avg_atBats                    | DOUBLE      |
+| avg_obp                       | DOUBLE      |
+| avg_slg                       | DOUBLE      |
+| avg_ops                       | DOUBLE      |
+| avg_caughtStealing            | DOUBLE      |
+| avg_stolenBases               | DOUBLE      |
+| avg_stolenBasePercentage      | DOUBLE      |
+| avg_groundIntoDoublePlay      | DOUBLE      |
+| avg_groundIntoTriplePlay      | DOUBLE      |
+| avg_plateAppearances          | DOUBLE      |
+| avg_totalBases                | DOUBLE      |
+| avg_rbi                       | DOUBLE      |
+| avg_leftOnBase                | DOUBLE      |
+| avg_sacBunts                  | DOUBLE      |
+| avg_sacFlies                  | DOUBLE      |
+| avg_catchersInterference      | DOUBLE      |
+| avg_pickoffs                  | DOUBLE      |
+| avg_atBatsPerHomeRun          | DOUBLE      |
+| avg_popOuts                   | DOUBLE      |
+| avg_lineOuts                  | DOUBLE      |
+| avg_gamesPlayed               | DOUBLE      |
+| month                         | INT         |
+| team_type                     | STRING      |
+
+#### `aggregated_player_season_boxscore_averages`
+
+| Column                        | Type        |
+| ----------------------------- | ----------- |
+| season                        | INT         |
+| team_id                       | INT         |
+| player_id                     | INT         |
+| avg_batting_gamesPlayed       | DOUBLE      |
+| avg_batting_flyOuts           | DOUBLE      |
+| avg_batting_groundOuts        | DOUBLE      |
+| avg_batting_airOuts           | DOUBLE      |
+| avg_batting_runs              | DOUBLE      |
+| avg_batting_doubles           | DOUBLE      |
+| avg_batting_triples           | DOUBLE      |
+| avg_batting_homeRuns          | DOUBLE      |
+| avg_batting_strikeOuts        | DOUBLE      |
+| avg_batting_baseOnBalls       | DOUBLE      |
+| avg_batting_intentionalWalks  | DOUBLE      |
+| avg_batting_hits              | DOUBLE      |
+| avg_batting_hitByPitch        | DOUBLE      |
+| avg_batting_avg               | DOUBLE      |
+| avg_batting_atBats            | DOUBLE      |
+| avg_batting_obp               | DOUBLE      |
+| avg_batting_slg               | DOUBLE      |
+| avg_batting_ops               | DOUBLE      |
+| avg_batting_caughtStealing    | DOUBLE      |
+| avg_batting_stolenBases       | DOUBLE      |
+| avg_batting_stolenBasePercentage | DOUBLE  |
+| avg_batting_groundIntoDoublePlay | DOUBLE  |
+| avg_batting_groundIntoTriplePlay | DOUBLE  |
+| avg_batting_plateAppearances  | DOUBLE      |
+| avg_batting_totalBases        | DOUBLE      |
+| avg_batting_rbi               | DOUBLE      |
+| avg_batting_leftOnBase        | DOUBLE      |
+| avg_batting_sacBunts          | DOUBLE      |
+| avg_batting_sacFlies          | DOUBLE      |
+| avg_batting_catchersInterference | DOUBLE  |
+| avg_batting_pickoffs          | DOUBLE      |
+| avg_batting_atBatsPerHomeRun  | DOUBLE      |
+| avg_batting_popOuts           | DOUBLE      |
+| avg_batting_lineOuts          | DOUBLE      |
+| avg_fielding_gamesStarted     | DOUBLE      |
+| avg_fielding_caughtStealing   | DOUBLE      |
+| avg_fielding_stolenBases      | DOUBLE      |
+| avg_fielding_stolenBasePercentage | DOUBLE|
+| avg_fielding_assists          | DOUBLE      |
+| avg_fielding_putOuts          | DOUBLE      |
+| avg_fielding_errors           | DOUBLE      |
+| avg_fielding_chances          | DOUBLE      |
+| avg_fielding_fielding         | DOUBLE      |
+| avg_fielding_passedBall       | DOUBLE      |
+| avg_fielding_pickoffs         | DOUBLE      |
+| month                         | INT         |
+| player_type                   | STRING      |
+
+#### `cumulative_team_season_boxscore_totals`
+
+| Column                        | Type        |
+| ----------------------------- | ----------- |
+| season                        | INT         |
+| team_id                       | INT         |
+| total_flyOuts                 | INT         |
+| total_groundOuts              | INT         |
+| total_airOuts                 | INT         |
+| total_runs                    | INT         |
+| total_doubles                 | INT         |
+| total_triples                 | INT         |
+| total_homeRuns                | INT         |
+| total_strikeOuts              | INT         |
+| total_baseOnBalls             | INT         |
+| total_intentionalWalks        | INT         |
+| total_hits                    | INT         |
+| total_hitByPitch              | INT         |
+| total_avg                     | DOUBLE      |
+| total_atBats                  | INT         |
+| total_obp                     | DOUBLE      |
+| total_slg                     | DOUBLE      |
+| total_ops                     | DOUBLE      |
+| total_caughtStealing          | INT         |
+| total_stolenBases             | INT         |
+| total_stolenBasePercentage    | DOUBLE      |
+| total_groundIntoDoublePlay    | INT         |
+| total_groundIntoTriplePlay    | INT         |
+| total_plateAppearances        | INT         |
+| total_totalBases              | INT         |
+| total_rbi                     | INT         |
+| total_leftOnBase              | INT         |
+| total_sacBunts                | INT         |
+| total_sacFlies                | INT         |
+| total_catchersInterference    | INT         |
+| total_pickoffs                | INT         |
+| total_atBatsPerHomeRun        | DOUBLE      |
+| total_popOuts                 | INT         |
+| total_lineOuts                | INT         |
+| total_gamesPlayed             | INT         |
+| month                         | INT         |
+| team_type                     | STRING      |
+
+#### `cumulative_player_season_boxscore_totals`
+
+| Column                        | Type        |
+| ----------------------------- | ----------- |
+| season                        | INT         |
+| team_id                       | INT         |
+| player_id                     | INT         |
+| total_batting_gamesPlayed     | INT         |
+| total_batting_flyOuts         | INT         |
+| total_batting_groundOuts      | INT         |
+| total_batting_airOuts         | INT         |
+| total_batting_runs            | INT         |
+| total_batting_doubles         | INT         |
+| total_batting_triples         | INT         |
+| total_batting_homeRuns        | INT         |
+| total_batting_strikeOuts      | INT         |
+| total_batting_baseOnBalls     | INT         |
+| total_batting_intentionalWalks| INT         |
+| total_batting_hits            | INT         |
+| total_batting_hitByPitch      | INT         |
+| total_batting_avg             | DOUBLE      |
+| total_batting_atBats          | INT         |
+| total_batting_obp             | DOUBLE      |
+| total_batting_slg             | DOUBLE      |
+| total_batting_ops             | DOUBLE      |
+| total_batting_caughtStealing  | INT         |
+| total_batting_stolenBases     | INT         |
+| total_batting_stolenBasePercentage | DOUBLE |
+| total_batting_groundIntoDoublePlay | INT    |
+| total_batting_groundIntoTriplePlay | INT    |
+| total_batting_plateAppearances| INT         |
+| total_batting_totalBases      | INT         |
+| total_batting_rbi             | INT         |
+| total_batting_leftOnBase      | INT         |
+| total_batting_sacBunts        | INT         |
+| total_batting_sacFlies        | INT         |
+| total_batting_catchersInterference | INT    |
+| total_batting_pickoffs        | INT         |
+| total_batting_atBatsPerHomeRun| DOUBLE      |
+| total_batting_popOuts         | INT         |
+| total_batting_lineOuts        | INT         |
+| total_fielding_gamesStarted   | INT         |
+| total_fielding_caughtStealing | INT         |
+| total_fielding_stolenBases    | INT         |
+| total_fielding_stolenBasePercentage | DOUBLE|
+| total_fielding_assists        | INT         |
+| total_fielding_putOuts        | INT         |
+| total_fielding_errors         | INT         |
+| total_fielding_chances        | INT         |
+| total_fielding_fielding       | DOUBLE      |
+| total_fielding_passedBall     | INT         |
+| total_fielding_pickoffs       | INT         |
+| month                         | INT         |
+| player_type                   | STRING      |
+
+#### `cumulative_team_season_boxscore_averages`
+
+| Column                        | Type        |
+| ----------------------------- | ----------- |
+| season                        | INT         |
+| team_id                       | INT         |
+| avg_flyOuts                   | DOUBLE      |
+| avg_groundOuts                | DOUBLE      |
+| avg_airOuts                   | DOUBLE      |
+| avg_runs                      | DOUBLE      |
+| avg_doubles                   | DOUBLE      |
+| avg_triples                   | DOUBLE      |
+| avg_homeRuns                  | DOUBLE      |
+| avg_strikeOuts                | DOUBLE      |
+| avg_baseOnBalls               | DOUBLE      |
+| avg_intentionalWalks          | DOUBLE      |
+| avg_hits                      | DOUBLE      |
+| avg_hitByPitch                | DOUBLE      |
+| avg_avg                       | DOUBLE      |
+| avg_atBats                    | DOUBLE      |
+| avg_obp                       | DOUBLE      |
+| avg_slg                       | DOUBLE      |
+| avg_ops                       | DOUBLE      |
+| avg_caughtStealing            | DOUBLE      |
+| avg_stolenBases               | DOUBLE      |
+| avg_stolenBasePercentage      | DOUBLE      |
+| avg_groundIntoDoublePlay      | DOUBLE      |
+| avg_groundIntoTriplePlay      | DOUBLE      |
+| avg_plateAppearances          | DOUBLE      |
+| avg_totalBases                | DOUBLE      |
+| avg_rbi                       | DOUBLE      |
+| avg_leftOnBase                | DOUBLE      |
+| avg_sacBunts                  | DOUBLE      |
+| avg_sacFlies                  | DOUBLE      |
+| avg_catchersInterference      | DOUBLE      |
+| avg_pickoffs                  | DOUBLE      |
+| avg_atBatsPerHomeRun          | DOUBLE      |
+| avg_popOuts                   | DOUBLE      |
+| avg_lineOuts                  | DOUBLE      |
+| avg_gamesPlayed               | DOUBLE      |
+| month                         | INT         |
+| team_type                     | STRING      |
+
+#### `cumulative_player_season_boxscore_averages`
+
+| Column                        | Type        |
+| ----------------------------- | ----------- |
+| season                        | INT         |
+| team_id                       | INT         |
+| player_id                     | INT         |
+| avg_batting_gamesPlayed       | DOUBLE      |
+| avg_batting_flyOuts           | DOUBLE      |
+| avg_batting_groundOuts        | DOUBLE      |
+| avg_batting_airOuts           | DOUBLE      |
+| avg_batting_runs              | DOUBLE      |
+| avg_batting_doubles           | DOUBLE      |
+| avg_batting_triples           | DOUBLE      |
+| avg_batting_homeRuns          | DOUBLE      |
+| avg_batting_strikeOuts        | DOUBLE      |
+| avg_batting_baseOnBalls       | DOUBLE      |
+| avg_batting_intentionalWalks  | DOUBLE      |
+| avg_batting_hits              | DOUBLE      |
+| avg_batting_hitByPitch        | DOUBLE      |
+| avg_batting_avg               | DOUBLE      |
+| avg_batting_atBats            | DOUBLE      |
+| avg_batting_obp               | DOUBLE      |
+| avg_batting_slg               | DOUBLE      |
+| avg_batting_ops               | DOUBLE      |
+| avg_batting_caughtStealing    | DOUBLE      |
+| avg_batting_stolenBases       | DOUBLE      |
+| avg_batting_stolenBasePercentage | DOUBLE  |
+| avg_batting_groundIntoDoublePlay | DOUBLE  |
+| avg_batting_groundIntoTriplePlay | DOUBLE  |
+| avg_batting_plateAppearances  | DOUBLE      |
+| avg_batting_totalBases        | DOUBLE      |
+| avg_batting_rbi               | DOUBLE      |
+| avg_batting_leftOnBase        | DOUBLE      |
+| avg_batting_sacBunts          | DOUBLE      |
+| avg_batting_sacFlies          | DOUBLE      |
+| avg_batting_catchersInterference | DOUBLE  |
+| avg_batting_pickoffs          | DOUBLE      |
+| avg_batting_atBatsPerHomeRun  | DOUBLE      |
+| avg_batting_popOuts           | DOUBLE      |
+| avg_batting_lineOuts          | DOUBLE      |
+| avg_fielding_gamesStarted     | DOUBLE      |
+| avg_fielding_caughtStealing   | DOUBLE      |
+| avg_fielding_stolenBases      | DOUBLE      |
+| avg_fielding_stolenBasePercentage | DOUBLE|
+| avg_fielding_assists          | DOUBLE      |
+| avg_fielding_putOuts          | DOUBLE      |
+| avg_fielding_errors           | DOUBLE      |
+| avg_fielding_chances          | DOUBLE      |
+| avg_fielding_fielding         | DOUBLE      |
+| avg_fielding_passedBall       | DOUBLE      |
+| avg_fielding_pickoffs         | DOUBLE      |
+| month                         | INT         |
+| player_type                   | STRING      |
+
+
+
+### Data Quality with dbt
 
 To ensure data quality, dbt (Data Build Tool) runs several tests on the tables stored in Iceberg. Including `Not Null` tests to ensure essential fields are not missing values, `No Duplicates` tests to verify the uniqueness of records, and checks to ensure numeric columns have `non-negative` values. `Data Type Consistency` tests confirm that fields conform to expected data types, `Accepted Values` tests ensure certain fields contain only valid values, and `date validity` checks confirm that date fields contain logical values.
 
-#### Airflow
+### Airflow
 
 Apache Airflow will orchestrate the workflow on a daily schedule.
 
@@ -86,7 +593,7 @@ The final predictions are generated by a meta-regressor, CatBoost, which combine
 Model metrics and predictions are logged in MLflow and stored in Azure PostgreSQL.
 
 ### Feature Selection
-#### Lasso Regression
+### Lasso Regression
 
 Also known as Least Absolute Shrinkage and Selection Operator, performs L1 regularization, which adds a penalty equal to the absolute value of the magnitude of the coefficients. This penalty forces some coefficients to become exactly zero, thus eliminating less important features from the model. By doing so, Lasso Regression helps in identifying the most significant features, such as runs, hits, and strikeouts, that are most relevant in predicting MLB game scores and outcomes over time.
 
@@ -98,7 +605,7 @@ where:
 - $\beta$ are the coefficients
 - $\lambda$ is the regularization parameter
 
-#### Random Forest
+### Random Forest
 
 Is an ensemble learning method that constructs multiple decision trees and outputs the mean prediction of the individual trees. It is known for handling a large number of features and reducing overfitting by averaging multiple decision trees. The prediction is calculated as the average of the predictions from all the decision trees.
 
@@ -109,7 +616,7 @@ where:
 - $N$ is the number of trees
 
 ### Hyperparameter Tuning
-#### Bayesian Optimization
+### Bayesian Optimization
 
 Used to find the optimal parameters for the models by maximizing an objective function, which is typically the negative mean squared error in regression tasks. It starts by initializing with a few random hyperparameter sets to get an initial sense of the hyperparameter space. It then evaluates the objective function, typically the negative mean squared error, for these initial sets to understand their performance. In an iterative process, Bayesian Optimization updates a surrogate model based on the results of these evaluations, and uses an acquisition function to select new hyperparameters that balance exploration of the hyperparameter space with exploitation of known good areas. This process continues until it converges to the set of hyperparameters that yields the best model performance
 
@@ -118,7 +625,7 @@ For CatBoost, the parameter space includes `iterations`, `depth`, `learning_rate
 $\text{Objective Function} = -\text{mean squared error}(y_{\text{train}}, \hat{y}_{\text{train}})$
 
 ### Models Training
-#### AdaBoost
+### AdaBoost
 
 Or Adaptive Boosting, combines multiple weak learners to create a strong learner. It assigns higher weights to incorrectly predicted instances, focusing more on hard-to-predict cases in subsequent iterations. The final prediction is a weighted sum of the weak learners' predictions.
 
@@ -129,7 +636,7 @@ where:
 - $h_t(x)$ is the $t$-th weak learner
 - $T$ is the total number of learners
 
-#### XGBoost
+### XGBoost
 
 An optimized distributed gradient boosting library designed to be highly efficient, flexible, and portable. It uses a regularization term in its objective function to prevent overfitting, which is the sum of the loss function and the regularization term over all trees. This optimization leads to better model performance and scalability.
 
@@ -141,7 +648,7 @@ where:
 - $f_k$ is the $k$-th tree
 - $K$ is the number of trees
 
-#### LightGBM
+### LightGBM
 A gradient boosting framework that uses tree-based learning algorithms. It is designed to be distributed and efficient, capable of handling large datasets with high performance. LightGBM reduces memory usage and improves execution speed through techniques like histogram-based algorithms and leaf-wise tree growth.
 
 $\hat{y} = \sum_{m=1}^{M} f_m(x)$
@@ -150,7 +657,7 @@ where:
 - $f_m(x)$ is the $m$-th tree
 - $M$ is the number of trees
 
-#### Multivariate Linear Regression
+### Multivariate Linear Regression
 
 Predicts a single target (e.g. game stat) variable using multiple predictor variables. 
 
@@ -163,7 +670,7 @@ where:
 - $\beta_1, \beta_2, \ldots, \beta_p$ are the coefficients of the independent variables.
 - $\epsilon$ is the error term (residuals).
 
-#### CatBoost
+### CatBoost
 
 A gradient boosting algorithm that handles categorical features effectively and reduces the need for extensive hyperparameter tuning. It constructs an ensemble of decision trees, where each tree is fit on the residuals of the previous trees. CatBoost is efficient in handling categorical variables without extensive preprocessing and speeds up training while reducing overfitting.
 
@@ -174,13 +681,13 @@ where:
 - $G_t(x)$ is the $t$-th gradient boosted tree
 - $T$ is the total number of trees
 
-#### Stacking Regressor
+### Stacking Regressor
 
 Also known as a MetaRegressor, combines multiple base regressors—AdaBoost, XGBoost, Linear Regression, and LightGBM—by using CatBoost as the meta-regressor. Each base regressor is individually trained on the data, and their predictions are then used as input features for CatBoost. 
 I want to see if Catboost will learn how to integrate the predictions from the base models to possibly provide a more accurate prediction compared to each individual model. Let's test this theory.
 
 ### Cross-Validations
-#### Time Series Split
+### Time Series Split
 
 A cross-validation technique used when dealing with time series data. It ensures that the training set always precedes the test set in time. The data is split into $k$ consecutive folds, and each fold is used as a test set once while the preceding observations are used as the training set.
 
@@ -190,7 +697,7 @@ $\{(X_t, Y_t)\}_{t=1}^{T}$ is the time series data, where $X_t$ represents the f
 
 where $T_i$ are the split points. For each fold, the model is trained on the training set and evaluated on the test set. The performance metric, such as Mean Squared Error (MSE), is averaged across all folds to give the final evaluation metric.
 
-#### Monte Carlo Cross-Validation
+### Monte Carlo Cross-Validation
 
 Also known as Shuffle-Split Cross-Validation, involves randomly splitting the dataset into training and test sets multiple times and evaluating the model on each split. This method helps to assess the stability and variability of the model’s performance.
 
@@ -224,7 +731,7 @@ where:
 - $\hat{Y}_i$: Predicted value of $Y_i$.
 - $n$: Total number of observations.
 
-#### Predictions & Model Metrics
+### Predictions & Model Metrics
 
 Predictions are stored in Iceberg tables, with the data and metadata for these tables stored in Azure Data Lake Storage container. 
 
