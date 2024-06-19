@@ -464,7 +464,8 @@ services:
     command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
     ports:
       - "7077:7077"
-      - "8080:8080"
+    env_file:
+      - .env      
     networks:
       - confluent
     user: "1001:0"
@@ -475,10 +476,18 @@ services:
       SPARK_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_SPARK_DB}
       SPARK_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
       SPARK_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64     
     volumes:
       - ./conf:/opt/spark/conf
       - /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop
       - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn   
+      - ./conf/log4j.properties:/opt/hadoop/etc/hadoop/log4j.properties   
+      - ./opt/hadoop/etc/hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./opt/hadoop/etc/hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml
+      - ./opt/hadoop/etc/yarn/yarn-site.xml:/opt/hadoop/etc/yarn/yarn-site.xml
+      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml
+      - ./opt/hadoop/etc/hadoop/mapred-site.xml:/opt/hadoop/etc/hadoop/mapred-site.xml
+      - ./hive/conf/metastore-site.xml:/opt/hive/conf/metastore-site.xml      
     depends_on:
       - kafka1
       - kafka2
@@ -503,8 +512,8 @@ services:
       - zookeeper3
     environment:
       SPARK_MODE: worker
-      SPARK_WORKER_CORES: 5
-      SPARK_WORKER_MEMORY: 12g
+      SPARK_WORKER_CORES: 2  
+      SPARK_WORKER_MEMORY: 20g  
       SPARK_MASTER_URL: spark://spark-master:7077
       SPARK_WORKER_PORT: 8881
       SPARK_WORKER_WEBUI_PORT: 8090
@@ -515,19 +524,29 @@ services:
       SPARK_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_SPARK_DB}
       SPARK_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
       SPARK_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64          
     ports:
       - "8086:8090"
+    env_file:
+      - .env      
     networks:
       - confluent
     volumes:
       - ./conf:/opt/spark/conf
       - /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop
-      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn  
+      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn   
+      - ./conf/log4j.properties:/opt/hadoop/etc/hadoop/log4j.properties   
+      - ./opt/hadoop/etc/hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./opt/hadoop/etc/hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml
+      - ./opt/hadoop/etc/yarn/yarn-site.xml:/opt/hadoop/etc/yarn/yarn-site.xml
+      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml
+      - ./opt/hadoop/etc/hadoop/mapred-site.xml:/opt/hadoop/etc/hadoop/mapred-site.xml
+      - ./hive/conf/metastore-site.xml:/opt/hive/conf/metastore-site.xml         
     deploy:
       resources:
         limits:
-          cpus: '5'
-          memory: 14g
+          cpus: '2'
+          memory: 20g
 
   spark-worker-2:
     build:
@@ -545,8 +564,8 @@ services:
       - zookeeper3
     environment:
       SPARK_MODE: worker
-      SPARK_WORKER_CORES: 5
-      SPARK_WORKER_MEMORY: 12g
+      SPARK_WORKER_CORES: 
+      SPARK_WORKER_MEMORY: 20g
       SPARK_MASTER_URL: spark://spark-master:7077
       SPARK_WORKER_PORT: 8882
       SPARK_WORKER_WEBUI_PORT: 8091
@@ -557,19 +576,29 @@ services:
       SPARK_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_SPARK_DB}
       SPARK_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
       SPARK_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64       
     ports:
       - "8087:8091"
+    env_file:
+      - .env      
     networks:
       - confluent
     volumes:
       - ./conf:/opt/spark/conf
       - /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop
-      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn        
+      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn   
+      - ./conf/log4j.properties:/opt/hadoop/etc/hadoop/log4j.properties   
+      - ./opt/hadoop/etc/hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./opt/hadoop/etc/hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml
+      - ./opt/hadoop/etc/yarn/yarn-site.xml:/opt/hadoop/etc/yarn/yarn-site.xml
+      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml
+      - ./opt/hadoop/etc/hadoop/mapred-site.xml:/opt/hadoop/etc/hadoop/mapred-site.xml
+      - ./hive/conf/metastore-site.xml:/opt/hive/conf/metastore-site.xml         
     deploy:
       resources:
         limits:
-          cpus: '5'
-          memory: 14g
+          cpus: '2'
+          memory: 20g
 
   spark-worker-3:
     build:
@@ -587,8 +616,8 @@ services:
       - zookeeper3
     environment:
       SPARK_MODE: worker
-      SPARK_WORKER_CORES: 5
-      SPARK_WORKER_MEMORY: 12g
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 20g
       SPARK_MASTER_URL: spark://spark-master:7077
       SPARK_WORKER_PORT: 8883
       SPARK_WORKER_WEBUI_PORT: 8092
@@ -599,19 +628,29 @@ services:
       SPARK_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_SPARK_DB}
       SPARK_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
       SPARK_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64            
     ports:
       - "8093:8092"
+    env_file:
+      - .env      
     networks:
       - confluent
     volumes:
       - ./conf:/opt/spark/conf
       - /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop
-      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn        
+      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn   
+      - ./conf/log4j.properties:/opt/hadoop/etc/hadoop/log4j.properties   
+      - ./opt/hadoop/etc/hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./opt/hadoop/etc/hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml
+      - ./opt/hadoop/etc/yarn/yarn-site.xml:/opt/hadoop/etc/yarn/yarn-site.xml
+      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml
+      - ./opt/hadoop/etc/hadoop/mapred-site.xml:/opt/hadoop/etc/hadoop/mapred-site.xml
+      - ./hive/conf/metastore-site.xml:/opt/hive/conf/metastore-site.xml                  
     deploy:
       resources:
         limits:
-          cpus: '5'
-          memory: 14g
+          cpus: '2'
+          memory: 20g
 
   spark-history:
     build:
@@ -621,17 +660,30 @@ services:
     command: /opt/spark/bin/spark-class org.apache.spark.deploy.history.HistoryServer
     ports:
       - "18080:18080"
+    env_file:
+      - .env  # Ensure this references the correct .env file
     environment:
       SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=abfss://${AZURE_CONTAINER}@${AZURE_ACCOUNT_NAME}.dfs.core.windows.net/spark-events -Dspark.history.ui.port=18080 -Dspark.history.ui.acls.enabled=true -Dspark.history.ui.admin.acls=spark -Dspark.history.ui.admin.acls.groups=hadoop -Dspark.rpc.message.maxSize=2047 -Dspark.network.timeout=10000"
       SPARK_WORK_DIR: /opt/spark/work
       SPARK_JDBC_URL: jdbc:postgresql://${AZURE_POSTGRES_HOST}:${AZURE_POSTGRES_PORT}/${AZURE_SPARK_DB}
       SPARK_JDBC_USER: ${AZURE_POSTGRES_USERNAME}
       SPARK_JDBC_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      ARM_CLIENT_ID: ${ARM_CLIENT_ID}
+      ARM_CLIENT_SECRET: ${ARM_CLIENT_SECRET}
+      ARM_TENANT_ID: ${ARM_TENANT_ID}
     volumes:
       - ./conf:/opt/spark/conf
       - /tmp/spark-events:/tmp/spark-events
       - /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop
-      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn        
+      - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn       
+      - ./conf/log4j.properties:/opt/hadoop/etc/hadoop/log4j.properties  
+      - ./opt/hadoop/etc/hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./opt/hadoop/etc/hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml
+      - ./opt/hadoop/etc/yarn/yarn-site.xml:/opt/hadoop/etc/yarn/yarn-site.xml
+      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml
+      - ./opt/hadoop/etc/hadoop/mapred-site.xml:/opt/hadoop/etc/hadoop/mapred-site.xml
+      - ./hive/conf/metastore-site.xml:/opt/hive/conf/metastore-site.xml           
     depends_on:
       - spark-master
       - spark-worker-1
@@ -645,11 +697,11 @@ services:
     container_name: spark-iceberg
     environment:
       HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
-      SPARK_WORKER_CORES: 5
-      SPARK_WORKER_MEMORY: 12g
-      SPARK_EXECUTOR_MEMORY: 12g
-      SPARK_EXECUTOR_CORES: 5
-      SPARK_DRIVER_MEMORY: 12g
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 16g
+      SPARK_EXECUTOR_MEMORY: 16g
+      SPARK_EXECUTOR_CORES: 2
+      SPARK_DRIVER_MEMORY: 16g
       SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=file:/tmp/spark-events -Dspark.history.ui.port=18080"
       SPARK_SQL_WAREHOUSE_DIR: "s3a://nelonelonelo/warehouse"
       SPARK_DIST_CLASSPATH: "/opt/hadoop/etc/hadoop:/opt/hadoop/share/hadoop/common/*:/opt/hadoop/share/hadoop/common/lib/*:/opt/hadoop/share/hadoop/hdfs/*:/opt/hadoop/share/hadoop/hdfs/lib/*:/opt/hadoop/share/hadoop/mapreduce/*:/opt/hadoop/share/hadoop/mapreduce/lib/*:/opt/hadoop/share/hadoop/yarn/*:/opt/hadoop/share/hadoop/yarn/lib/*"
@@ -673,31 +725,34 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '5'
-          memory: 14g
+          cpus: '2'
+          memory: 16g
 
   hive-metastore:
     build:
       context: .
       dockerfile: Dockerfile.hive-metastore
     environment:
-      SERVICE_PRECONDITION: zookeeper:2181
-      HIVE_METASTORE_URI: thrift://hive-metastore:9083
-      HADOOP_HOME: /opt/hadoop
-      HIVE_HOME: /opt/hive
-      JAVA_HOME: /usr/local/openjdk-17
-      SERVICE: metastore
-      POSTGRES_USER: ${AZURE_POSTGRES_USERNAME}
-      POSTGRES_PASSWORD: ${AZURE_POSTGRES_PASSWORD}
-      POSTGRES_DB: ${AZURE_HIVE_DB}
-      POSTGRES_HOST: ${AZURE_POSTGRES_HOST}
-      POSTGRES_PORT: ${AZURE_POSTGRES_PORT}
+      - JAVA_HOME=/usr/local/openjdk-8
+      - PATH=/usr/local/openjdk-8/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - HADOOP_HOME=/opt/hadoop
+      - HIVE_HOME=/opt/hive
+      - HIVE_METASTORE_URI=thrift://hive-metastore:9083
+      - SERVICE=metastore      
+      - POSTGRES_USER=${AZURE_POSTGRES_USERNAME}
+      - POSTGRES_PASSWORD=${AZURE_POSTGRES_PASSWORD}
+      - POSTGRES_DB=${AZURE_HIVE_DB}
+      - POSTGRES_HOST=${AZURE_POSTGRES_HOST}
+      - POSTGRES_PORT=${AZURE_POSTGRES_PORT}
     volumes:
       - ./hive/conf:/opt/hive/conf
       - /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop
       - /opt/hadoop/etc/yarn:/opt/hadoop/etc/yarn  
       - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
-      - ./hive/conf/metastore-site.xml:/opt/hive/conf/metastore-site.xml:ro      
+      - ./hive/conf/metastore-site.xml:/opt/hive/conf/metastore-site.xml:ro  
+      - ./conf/log4j.properties:/opt/hadoop/etc/hadoop/log4j.properties   
+      - ./opt/hadoop/etc/hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml      
+      - ./opt/hadoop/etc/hadoop/mapred-site.xml:/opt/hadoop/etc/hadoop/mapred-site.xml             
     ports:
       - "9083:9083"
     networks:
@@ -728,8 +783,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4'
-          memory: 8192M
+          cpus: '2'
+          memory: 16g
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -756,8 +811,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '8'
-          memory: 16384M
+          cpus: '2'
+          memory: 16g
 
   dbt-service:
     build:
@@ -772,8 +827,8 @@ services:
     restart: always
     volumes:
       - ./dbt:/dbt
-      - ./app/producers:/dbt/Kafka_producers
-      - ./app/consumers:/dbt/Spark_streams
+      - ./app/embeddings:/dbt/embeddings
+      - ./app/consumers:/dbt/consumers
     command: sleep infinity
     healthcheck:
       test: ["CMD", "dbt", "--version"]
